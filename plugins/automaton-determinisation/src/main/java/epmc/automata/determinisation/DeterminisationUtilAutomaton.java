@@ -10,7 +10,7 @@ import epmc.messages.OptionsMessages;
 import epmc.modelchecker.Log;
 import epmc.options.Options;
 
-public class DeterministationUtilAutomaton extends UtilAutomaton {
+public class DeterminisationUtilAutomaton extends UtilAutomaton {
 	public static ParityAutomaton newParityAutomaton
     (Expression property, Expression[] expressions) {
         assert property != null;

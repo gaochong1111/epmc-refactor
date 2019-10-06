@@ -54,3 +54,8 @@ page/
 
 #
 /bin/
+
+# document
+.dot
+.pdf
+

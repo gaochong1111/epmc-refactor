@@ -30,7 +30,7 @@ import java.util.Set;
 
 import com.google.common.collect.Sets;
 
-import epmc.automata.determinisation.DeterministationUtilAutomaton;
+import epmc.automata.determinisation.DeterminisationUtilAutomaton;
 import epmc.automata.determinisation.ParityAutomaton;
 import epmc.automaton.Automaton;
 import epmc.automaton.BuechiTransitionImpl;
@@ -40,6 +40,7 @@ import epmc.expression.standard.ExpressionIdentifier;
 import epmc.expression.standard.ExpressionLiteral;
 import epmc.expression.standard.ExpressionOperator;
 import epmc.expression.standard.ExpressionQuantifier;
+import epmc.expression.standard.ExpressionTemporalFinally;
 import epmc.expression.standard.ExpressionTypeInteger;
 import epmc.graph.CommonProperties;
 import epmc.graph.StateMap;
@@ -69,7 +70,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     public final static String IDENTIFIER = "qltl-explicit";
     private ModelChecker modelChecker;
     private GraphExplicit graph;
-    private StateSetExplicit computeForStates;
+    // private StateSetExplicit computeForStates;
     private Expression property;
     private StateSet forStates;
 
@@ -118,7 +119,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     private StateMap doSolve(Expression property, StateSet states, boolean min) {
     	this.forStates = (StateSetExplicit) forStates;
     	Expression[] expressions = UtilQLTL.collectQLTLInner(property).toArray(new Expression[0]);
-    	ParityAutomaton pa = DeterministationUtilAutomaton.newParityAutomaton(property, expressions);
+    	ParityAutomaton pa = DeterminisationUtilAutomaton.newParityAutomaton(property, expressions);
     	System.out.println(pa.getBuechi().getGraph());
         System.out.println(this.graph);
         product(pa);
@@ -177,7 +178,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
 		  return resultList;
      }
     
-    private class Node2 {
+    protected class Node2 {
     	private int nodePA;
     	private int nodeModel;
     	
@@ -358,9 +359,13 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     
     @Override
     public boolean canHandle() {
+    	// TODO: the conditions for QLTLSolver
         assert property != null;
         if (!(modelChecker.getEngine() instanceof EngineExplicit)) {
             return false;
+        }
+        if (ExpressionTemporalFinally.is(property)) {
+        	return true;
         }
 //        Semantics semantics = modelChecker.getModel().getSemantics();
 //        if (!SemanticsDiscreteTime.isDiscreteTime(semantics)
@@ -386,7 +391,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
 //        if (allStates != null) {
 //            allStates.close();
 //        }
-        return true;
+        return false;
     }
 
     
@@ -402,8 +407,9 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         Set<Object> required = new LinkedHashSet<>();
         required.add(CommonProperties.STATE);
         required.add(CommonProperties.PLAYER);
-        ExpressionQuantifier propertyQuantifier = (ExpressionQuantifier) property;
-        Set<Expression> inners = UtilQLTL.collectQLTLInner(propertyQuantifier.getQuantified());
+        // System.out.println("property: " + property);
+        // ExpressionQuantifier propertyQuantifier = (ExpressionQuantifier) property;
+        Set<Expression> inners = UtilQLTL.collectQLTLInner(property); // propertyQuantifier.getQuantified()
         StateSet allStates = UtilGraph.computeAllStatesExplicit(modelChecker.getLowLevel());
         for (Expression inner : inners) {
             required.addAll(modelChecker.getRequiredNodeProperties(inner, allStates));
@@ -423,7 +429,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         return IDENTIFIER;
     }
 
-    private ValueArray newValueArrayWeight(int size) {
+    protected ValueArray newValueArrayWeight(int size) {
         TypeArray typeArray = TypeWeight.get().getTypeArray();
         return UtilValue.newArray(typeArray, size);
     }
