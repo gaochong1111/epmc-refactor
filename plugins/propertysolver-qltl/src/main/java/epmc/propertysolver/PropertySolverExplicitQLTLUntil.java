@@ -31,6 +31,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -159,14 +160,22 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         	genScript(script);
         	String[] testArgs = new String[] {"python3", script.getAbsolutePath(), res.get("stateStr"), res.get("qStr"),
         			res.get("priStr"), res.get("classicalStateStr")};
+        	System.out.println(Arrays.toString(testArgs));
 	        Process proc = Runtime.getRuntime().exec(testArgs);// 执行py文件
 	        // OUT
-	        BufferedReader in = new BufferedReader(new InputStreamReader(proc.  getInputStream()));
+	        BufferedReader in = new BufferedReader(new InputStreamReader(proc.getInputStream()));
+	        
 	        String line = null;
 	        while ((line = in.readLine()) != null) {
 	            System.out.println(line);
 	        }
 	        in.close();
+	        BufferedReader errIn = new BufferedReader(new InputStreamReader(proc.getErrorStream()));
+	        while ((line = errIn.readLine()) != null) {
+	            System.out.println(line);
+	        }
+	        errIn.close();
+	        
 	        proc.waitFor();
 	        script.delete();
 	    } catch (IOException e) {
@@ -273,10 +282,20 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     		if (dimension != -1) {
     			for (int i = 0; i < dimension; i++) {
     				String vecStr = "[";
-    				for (int j = 0; j < dimension-1; j++) {
-    					vecStr += "1.0000000+0.0000000j, ";
+    				int j;
+    				for (j = 0; j < dimension-1; j++) {
+    					if (i == j) {
+    						vecStr += "1.0000000+0.0000000j,";
+    					} else {
+    						vecStr += "0.0000000+0.0000000j,";
+    					}
     				}
-    				vecStr += "1.0000000+0.0000000j";
+    				if (i == j) {
+						vecStr += "1.0000000+0.0000000j,";
+					} else {
+						vecStr += "0.0000000+0.0000000j,";
+					}
+    				
     				if (i < dimension-1) {
     					vecStr += "],";
     				} else {
