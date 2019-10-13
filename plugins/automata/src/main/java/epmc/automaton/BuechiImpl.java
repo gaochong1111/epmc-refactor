@@ -283,11 +283,11 @@ public class BuechiImpl implements Buechi {
                 autExecArgsList.addAll(additionalSpotParamerters);
             }
             final String[] autExecArgs = autExecArgsList.toArray(new String[0]);
-            for (String str : autExecArgs) {
-            	System.out.print(str);
-            	System.out.print(" ");
-            }
-            System.out.println();
+//            for (String str : autExecArgs) {
+//            	System.out.print(str);
+//            	System.out.print(" ");
+//            }
+//            System.out.println();
             final Process autProcess = Runtime.getRuntime().exec(autExecArgs);
             final BufferedReader autIn = new BufferedReader
                     (new InputStreamReader(autProcess.getInputStream()));

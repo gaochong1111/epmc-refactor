@@ -1,0 +1,17 @@
+qmc // model type
+
+const vector(2) |p> = (|0>_2 + |1>_2)/sqrt(2);
+// const vector(2) |p> = (|0> + |1>)/sqrt(2);
+// const matrix(2,2) E0 = |0>_2 <0|_2 + |1>_2 <1_2|/sqrt(2);
+const matrix(2,2) E0 = |0> <0| + |1> <1|/sqrt(2);
+const matrix E1 = |0>_2 <1|_2/sqrt(2);
+// const matrix E1 = |0> <1|/sqrt(2);
+const superoperator(2) ampdamp = << E0, E1 >>;
+
+module loop
+  s : [0..3] init 0;
+  [] (s=0) -> ampdamp: (s'=1);
+  [] (s=1) -> << M1 >> : (s'=2) + << M0 >> : (s'=3);
+  [] (s=2) -> << HD >> : (s'=1);
+  [] (s=3) -> (s'=3);
+endmodule

@@ -1,0 +1,571 @@
+'''
+Created on 2019年8月1日
+
+@author: chenyan
+'''
+import numpy as np
+np.set_printoptions(threshold=np.inf)
+from scipy.linalg.decomp_svd import orth
+from scipy.constants.constants import epsilon_0
+from scipy.linalg import null_space
+
+'''
+COMMON
+'''
+def is_square(matrix):
+    return len(matrix.shape) == 2 and matrix.shape[0] == matrix.shape[1]
+
+def is_zero_array(a):
+    zero_array = np.zeros(a.shape, dtype=np.complex)
+    return array_equal(a, zero_array)
+
+def array_equal(a1, a2):
+    if a1.shape != a2.shape:
+        return False
+    diff = a1 - a2
+    diff_real = np.abs(diff.real)
+    diff_imag = np.abs(diff.imag)
+    if len(np.argwhere(diff_real > epsilon_0)) != 0 or len(np.argwhere(diff_imag > epsilon_0)) != 0:
+        return False
+    return True
+
+def complex_equal(c1, c2):
+    diff = c1 - c2
+    if np.abs(diff.real) > epsilon_0 or np.abs(diff.imag) > epsilon_0:
+        return False
+    return True
+
+def is_jordan_block(matrix):
+    if not is_square(matrix):
+        return False
+    row_index = matrix.shape[0] - 1
+    for i in range(0, row_index):
+        if not complex_equal(matrix[i, i], matrix[i + 1, i + 1]):
+            return False
+    for k in range(0, row_index):
+        if not complex_equal(matrix[k, k + 1], 1.0 + 0.j):
+            return False
+    return True
+
+def jordan_eigen_value(J):
+    i = 0
+    eigen_value_map = dict()
+    while i < J.shape[1]:
+        start = i
+        for j in range(1, J.shape[1] - start + 1):
+            if is_jordan_block(J[start:start + j, start:start + j]):
+                eigen_value_map.setdefault(J[start, start], []).append((start, j))
+                i = i + j
+                break
+    return eigen_value_map
+
+def matrix_infinite(matrix):
+    print("begin")
+    P, J = Matrix(matrix).jordan_form()
+    print("J:")
+    print(J)
+    J = np.matrix(J).astype(np.complex)
+    P = np.matrix(P).astype(np.complex)
+    eigen_value_map = jordan_eigen_value(J)
+    res = np.zeros([J.shape[0], J.shape[1]], dtype=np.complex)
+    for key, value in eigen_value_map.items():
+        if complex_equal(key, 1.0 + 0.j):
+            for item in value:
+                jordan_block = np.zeros([J.shape[0], J.shape[1]], dtype=np.complex)
+                for i in range(item[1]):
+                    jordan_block[item[0] + i, item[0] + i] = key
+                for j in range(item[1] - 1):
+                    jordan_block[item[0] + j, item[0] + j + 1] = 1.0 + 0.j
+                res += jordan_block
+    return res
+    
+def check_std_ort(basis):
+    #subspace is null
+    if len(basis) == 0:
+        return False
+    
+    c0 = np.complex(0.0, 0.0) # 0.0 + 0.0j
+    c1 = np.complex(1.0, 0.0) # 1.0 + 0.0j
+    dimension = len(basis[0]) # dimension of subspace
+    index1_set = set() # 分量为1的下标集合
+    
+    for v in basis:
+        if len(v) != dimension:
+            return False
+        index0 = np.argwhere(v == c0) # TODO 视具体情况决定是否使用delta
+        index1 = np.argwhere(v == c1)
+        if index1.shape[0] != 1 or index0.shape[0] != dimension - 1:
+            return False
+        else:
+            index1 = index1[0][0]
+            if index1 in index1_set:
+                return False
+            else:
+                index1_set.add(index1)
+    return True
+
+def is_positive(operator):
+    if not is_square(operator):
+        return False
+    
+    if array_equal(operator, np.zeros(operator.shape, dtype=np.complex)):
+        return True
+    
+    eigen_values, _ = np.linalg.eig(operator)
+    
+    for value in eigen_values:
+        if value.real < -epsilon_0:
+            return False
+    
+    return True
+        
+
+def decompose_into_positive_operators(operator):
+    if not is_square(operator):
+        return
+    dimension = operator.shape[0]
+    real_part = operator.real
+    image_part = operator.imag
+    real_positive = np.matrix(np.zeros(shape=[dimension, dimension], dtype=np.complex))
+    real_negative = np.matrix(np.zeros(shape=[dimension, dimension], dtype=np.complex))
+    image_positive = np.matrix(np.zeros(shape=[dimension, dimension], dtype=np.complex))
+    image_negative = np.matrix(np.zeros(shape=[dimension, dimension], dtype=np.complex))
+    
+    eigen_values, eigen_vectors = np.linalg.eig(real_part)
+
+    for i in range(len(eigen_values)):
+        if eigen_values[i] > epsilon_0:
+            real_positive += eigen_values[i] * np.outer(eigen_vectors[:,i], np.conjugate(eigen_vectors[:,i]))
+        elif eigen_values[i] < -epsilon_0:
+            real_negative -= eigen_values[i] * np.outer(eigen_vectors[:,i], np.conjugate(eigen_vectors[:,i]))
+    
+    eigen_values, eigen_vectors = np.linalg.eig(image_part)
+    for i in range(len(eigen_values)):
+        if eigen_values[i] > epsilon_0:
+            image_positive += eigen_values[i] * np.outer(eigen_vectors[:,i], np.conjugate(eigen_vectors[:,i]))
+        elif eigen_values[i] < -epsilon_0:
+            image_negative -= eigen_values[i] * np.outer(eigen_vectors[:,i], np.conjugate(eigen_vectors[:,i]))
+    
+    return real_positive, real_negative, image_positive, image_negative
+
+def get_support(operator):
+    if not is_square(operator):
+        return
+    dimension = operator.shape[0]
+    
+    orth_basis = np.matrix(orth(operator))
+    
+    res = np.matrix(np.zeros([dimension, dimension], dtype=np.complex))
+    for i in range(orth_basis.shape[1]):
+        m = operator * orth_basis[:,i]
+        if not is_zero_array(m):
+            res += np.outer(orth_basis[:,i], np.conjugate(orth_basis[:,i]))
+
+    return res
+
+def projector_join(projector1, projector2):
+    return get_support(projector1 + projector2)
+
+def get_orth_complement(projector):
+    if not is_square(projector):
+        return
+    dimension = projector.shape[0]
+    
+    res = np.matrix(np.zeros([dimension, dimension], dtype=np.complex))
+    basis = np.matrix(null_space(projector))
+    for i in range(basis.shape[1]):
+        if is_zero_array(projector * basis[:, i]):
+            res += np.matrix(np.outer(basis[:, i], np.conjugate(basis[:, i])))
+    
+    return res
+
+
+
+class SuperOperator:
+    '''
+    super operator
+    '''
+    def __init__(self, kraus=[]):
+        '''
+        Constructor
+        kraus: np.matrix
+        '''
+        self._kraus = kraus
+        if len(kraus) != 0:
+            self._dimension = kraus[0].shape[0]
+            for m in kraus:
+                if len(m.shape) != 2 or m.shape[0] != self._dimension or m.shape[1] != self._dimension:
+                    return 
+        else:
+            self._dimension = 0
+        self._kraus = kraus
+        
+    @property
+    def kraus(self):
+        return self._kraus
+    
+    @kraus.setter
+    def kraus(self, value):
+        if len(value) != 0:
+            self._dimension = value[0].shape[0]
+            for m in value:
+                if len(m.shape) != 2 or m.shape[0] != self._dimension or m.shape[1] != self._dimension:
+                    return 
+        else:
+            self._dimension = 0
+        self._kraus = value
+    
+    @property
+    def dimension(self):
+        return self._dimension
+    
+    @dimension.setter
+    def dimension(self, value):
+        self._dimension = value
+    
+    def get_matrix_representation(self):
+        res = np.matrix(np.zeros(shape=[self.dimension ** 2, self.dimension ** 2],dtype=np.complex))
+        for i in range(len(self.kraus)):
+            res += np.kron(self.kraus[i], np.conjugate(self.kraus[i]))
+        return res
+    
+    def get_positive_eigen_operators(self):
+        '''
+        Get a (complete, but not necessarily linear independent) set of 
+        positive fixed-operators for the super-operator 
+        '''
+        res = []
+        if self.dimension == 0 or len(self.kraus) == 0:
+            return res
+
+        matrix_representation = self.get_matrix_representation()
+        
+        eigen_values, eigen_vectors = np.linalg.eig(matrix_representation)
+        
+        for i in range(len(eigen_values)):
+            if np.abs((eigen_values[i] - 1.0).real) < epsilon_0 and np.abs(eigen_values[i].imag) < epsilon_0:
+                # eigen_vectors[:,i] shape (dimension, 1) is a matrix not a vector
+                eigen_matrix = np.matrix(eigen_vectors[:,i].reshape([self.dimension, self.dimension]))
+                
+                real_positive, real_negative, image_positive, image_negative = decompose_into_positive_operators(eigen_matrix)
+                
+                if not is_zero_array(real_positive):
+                    res.append(real_positive)
+                if not is_zero_array(real_negative):
+                    res.append(real_negative)
+                if not is_zero_array(image_positive):
+                    res.append(image_positive)
+                if not is_zero_array(image_negative):
+                    res.append(image_negative)
+                    
+        return res
+    
+    def apply_on_operator(self, operator):
+        if not is_square(operator):
+            return     
+        if not self.dimension == operator.shape[0]:
+            return
+        
+        res = np.matrix(np.zeros([self.dimension, self.dimension], dtype=np.complex))
+        
+        for i in range(len(self.kraus)):
+            res += self.kraus[i] * operator * self.kraus[i].H
+        
+        return res
+    
+    def product_super_operator(self, super_operator):
+        new_matrix = self.get_matrix_representation() * super_operator.get_matrix_representation()
+        return create_from_matrix_representation(new_matrix)
+    
+    def product_operator(self, operator):
+        kraus = []
+        kraus.append(operator)
+        super_operator = SuperOperator(kraus)
+        return super_operator.product_super_operator(self)
+    
+    def power(self, n):
+        if n == 0:
+            karus = []
+            karus.append(np.eye(self.dimension, self.dimension, dtype=np.complex))
+            return SuperOperator(karus)
+        elif n > 0:
+            return self.product_super_operator(self.power(n - 1))
+        
+    def max_period(self):
+        projects = self.bscc_decomposition()  
+        periods = np.zeros(len(projects) - 1, dtype=np.int32)
+        
+        for i in range(1, len(projects)):
+            periods[i - 1] = len(self.period_decomposition(projects[i]))
+        
+        return np.max(periods)
+    
+    def infinity(self):
+        this_matrix = self.get_matrix_representation()
+        start = 15
+        start_matrix = self.get_matrix_representation()
+        
+        for _ in range(start):
+            start_matrix = start_matrix * start_matrix
+        
+        max_period = self.max_period()
+        for _ in range(1, max_period):
+            start_matrix = start_matrix + start_matrix * this_matrix
+        
+        start_matrix = 1.0 / max_period * start_matrix
+        previous_matrix = start_matrix
+        
+        n = 1
+        while True:
+            current_matrix =  n * previous_matrix * this_matrix + start_matrix
+            current_matrix = 1.0 / (n + 1) * current_matrix
+            if is_zero_array(previous_matrix - current_matrix):
+                break
+            previous_matrix = current_matrix
+            ++n
+        return create_from_matrix_representation(current_matrix)
+    
+    def check_bscc(self, projector):
+        support = get_support(self.apply_on_operator(projector))
+        if not is_positive(projector - support):
+            return False
+        
+        matrix_representation = np.kron(projector, np.conjugate(projector)) * self.get_matrix_representation()
+        
+        pro_so = create_from_matrix_representation(matrix_representation)
+        fix_points = pro_so.get_positive_eigen_operators()
+        
+        if len(fix_points) != 1:
+            return False
+        
+        return array_equal(fix_points[0], projector)
+
+    def get_bscc(self, projector):
+        matrix_representation = np.kron(projector, np.conjugate(projector)) * self.get_matrix_representation()
+        
+        pro_so = create_from_matrix_representation(matrix_representation)
+        
+        fix_points = pro_so.get_positive_eigen_operators()
+        
+        '''fix_points[i] compare to projector'''
+        
+        fix_points = sorted(fix_points, key=lambda x: np.linalg.matrix_rank(x))
+        pop_index = []
+        
+        for i in range(len(fix_points) - 1):
+            support_i = get_support(fix_points[i])
+            for j in range(i + 1, len(fix_points)):
+                if j in pop_index:
+                    continue
+                support_j = get_support(fix_points[j])
+                if array_equal(fix_points[i], fix_points[j]) or is_positive(support_j - support_i):
+                    pop_index.append(j)
+        
+        for index in pop_index:
+            fix_points.pop(index)
+    
+        res = []
+        
+        if len(fix_points) == 0:
+            return res
+        elif len(fix_points) == 1:
+            res.append(get_support(fix_points[0]))
+            return res
+        else:
+            diff = fix_points[0] - fix_points[1]
+            real_positive, real_negative, _, _ = decompose_into_positive_operators(diff)
+            projector_s = None
+            if is_zero_array(real_positive):
+                projector_s = get_support(real_negative)
+            else:
+                projector_s = get_support(real_positive)
+            complement = projector - projector_s
+            
+            res.extend(self.get_bscc(projector_s))
+            res.extend(self.get_bscc(complement))
+            return res
+    
+    def bscc_decomposition(self):
+        dimension = self.dimension
+        res = self.get_bscc(np.eye(dimension, dimension, dtype=np.complex))
+        
+        stationary = np.matrix(np.zeros([dimension, dimension], dtype=np.complex))
+        for projector in res:
+            stationary = projector_join(stationary, projector)
+        
+        res.insert(0, get_orth_complement(stationary))
+        
+        return res
+        
+    def period_decomposition(self, bscc):
+        res = []
+        
+        if not self.check_bscc(bscc):
+            return res
+        
+        so = self.product_operator(bscc)
+        matrix_representation = so.get_matrix_representation()
+        
+        eigen_values, _ = np.linalg.eig(matrix_representation)
+        
+        period = 0
+        
+        for i in range(len(eigen_values)):
+            if np.abs((eigen_values[i] - 1.0).real) < epsilon_0 and np.abs(eigen_values[i].imag) < epsilon_0:
+                period = period + 1
+        
+        return self.power(period).get_bscc(bscc)   
+ 
+
+def create_from_choi_representation(matrix):
+    if not is_square(matrix):
+        print("Matrix is not a square!")
+        return
+    dimension = matrix.shape[0]
+    sqrt = np.sqrt(dimension)
+    
+    if sqrt - np.floor(sqrt) > epsilon_0:
+        print("Sqrt is not a integer!")
+        return
+    
+    n_dimension = int(sqrt)
+    
+    kraus = []
+    eigen_values, eigen_vectors = np.linalg.eig(matrix)
+    
+    for i in range(len(eigen_values)):
+        if eigen_values[i].real > epsilon_0:
+            eigen_vector = eigen_vectors[:,i] * np.sqrt(eigen_values[i].real)
+            if not is_zero_array(eigen_vector):
+                kraus.append(eigen_vector.reshape([n_dimension, n_dimension]))
+    
+    return SuperOperator(kraus)
+
+
+
+def create_from_matrix_representation(matrix):
+    if not is_square(matrix):
+        print("Matrix is not a square!")
+        return
+    dimension = matrix.shape[0]
+    sqrt = np.sqrt(dimension)
+    
+    if sqrt - np.floor(sqrt) > epsilon_0:
+        print("Sqrt is not a integer!")
+        return
+    
+    n_dimension = int(sqrt)
+    choi_matrix = np.matrix(np.zeros([dimension, dimension], dtype=np.complex))
+    
+    for k in range(n_dimension):
+        for n in range(n_dimension):
+            for m in range(n_dimension):
+                for j in range(n_dimension):
+                    choi_matrix[k * n_dimension + m, n * n_dimension +j] = matrix[k * n_dimension + n, m * n_dimension +j]
+    
+    return create_from_choi_representation(choi_matrix)
+
+
+
+
+def pqmc_values(states, Q, pri, classical_state, super_operator_demension):
+    if classical_state > np.max(states):
+        print('The classical state index out of range!')
+        return
+    
+    state_demension = np.max(states) + 1
+    I_c = np.eye(state_demension, state_demension, dtype = np.complex)
+    I_H = np.eye(super_operator_demension, super_operator_demension, dtype=np.complex)
+    
+    E_s = np.kron(I_c[classical_state].reshape([state_demension, 1]), I_H)
+    M_s = np.kron(E_s, np.conjugate(E_s))
+#     print("M_s:")
+#     print(M_s.shape)
+    
+    M_c = np.zeros([super_operator_demension ** 2, (super_operator_demension ** 2) * (state_demension ** 2)], dtype=np.complex)
+    for s in states:
+        E = np.kron(I_c[s].reshape([1, state_demension]), I_H)
+        M_c += np.kron(E, np.conjugate(E))
+#     print("M_c:")
+#     print(M_c.shape)
+    
+    M = np.zeros([(super_operator_demension ** 2) * (state_demension ** 2), (super_operator_demension ** 2) * (state_demension ** 2)], dtype=np.complex)
+    for key, value in Q.items():
+        E_i_kraus = value.kraus
+        adjacency_matrix = np.zeros([state_demension, state_demension], dtype=np.complex)
+        adjacency_matrix[key[1], key[0]] = 1.0
+        for e in E_i_kraus:
+            E = np.kron(adjacency_matrix, e)
+            M += np.kron(E, np.conjugate(E))
+#     print("M:")
+#     print(M.shape)
+    
+    super_operator_M = create_from_matrix_representation(M)
+    M_infinite = super_operator_M.infinity().get_matrix_representation()
+#     print("M_infinite:")
+#     print(M_infinite)
+    
+    M_even = np.zeros([(super_operator_demension ** 2) * (state_demension ** 2), (super_operator_demension ** 2) * (state_demension ** 2)], dtype=np.complex)
+    bscc_min_pri_key = []
+    bscc_min_pri_value = []
+    B = super_operator_M.get_bscc(np.kron(I_c, I_H))
+#     print("B:")
+#     print(B)
+    for b in B:
+        C_b = []
+        vecs = orth(b)
+        for vec in vecs:
+            nonzero_index = -1
+            flag = False
+            for i in range(state_demension):
+                if not is_zero_array(vec[i * super_operator_demension:(1 + i) * super_operator_demension]):
+                    if not flag:
+                        flag = True
+                        nonzero_index = i
+                    else:
+                        flag = False
+                        break
+            if flag:
+                C_b.append(nonzero_index)
+        bscc_min_pri_key.append(b)
+        bscc_min_pri_value.append(np.min(C_b))
+    EP = set()
+    # print(pri)
+    for key, value in pri.items():
+        if value % 2 == 0:
+            EP.add(key)
+    for k in EP:
+        P_k = np.zeros([super_operator_demension * state_demension, super_operator_demension * state_demension], dtype=np.complex)
+        for i in range(len(bscc_min_pri_key)):
+            if bscc_min_pri_value[i] == k:
+                P_k += bscc_min_pri_key[i]
+        M_even += np.kron(P_k, P_k)
+    
+    M_c = np.matrix(M_c)
+    M_even = np.matrix(M_even)
+    M_s = np.matrix(M_s)
+    return M_c * M_even * M_infinite * M_s 
+        
+'''
+states: int set
+Q: qmc (int, int): superoperator
+pri: state priority int: int
+classical_state: int
+super_operator_demension: int
+'''
+if __name__ == '__main__':
+    print("Hello!")
+    states = np.array([0, 1, 2, 3, 4, 5, 6, 7])
+    Q = {(2,4):[[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j]],(2,6):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j]],(6,6):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j]],(0,3):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.5000000+0.0000000j],[0.0000000+0.0000000j,0.7071068+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.7071068+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.5000000+0.0000000j]],(4,3):[[ 0.5000000+0.0000000j, 0.5000000+0.0000000j, 0.5000000+0.0000000j, 0.5000000+0.0000000j],[ 0.5000000+0.0000000j,-0.5000000+0.0000000j, 0.5000000+0.0000000j,-0.5000000+0.0000000j],[ 0.5000000+0.0000000j, 0.5000000+0.0000000j,-0.5000000+0.0000000j,-0.5000000+0.0000000j],[ 0.5000000+0.0000000j,-0.5000000+0.0000000j,-0.5000000+0.0000000j, 0.5000000+0.0000000j]],(1,3):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.5000000+0.0000000j],[0.0000000+0.0000000j,0.7071068+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.7071068+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.5000000+0.0000000j]],(3,5):[[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j]],(3,7):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j]],(5,3):[[ 0.5000000+0.0000000j, 0.5000000+0.0000000j, 0.5000000+0.0000000j, 0.5000000+0.0000000j],[ 0.5000000+0.0000000j,-0.5000000+0.0000000j, 0.5000000+0.0000000j,-0.5000000+0.0000000j],[ 0.5000000+0.0000000j, 0.5000000+0.0000000j,-0.5000000+0.0000000j,-0.5000000+0.0000000j],[ 0.5000000+0.0000000j,-0.5000000+0.0000000j,-0.5000000+0.0000000j, 0.5000000+0.0000000j]],(7,7):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j]]}    
+    pri = {0:1,1:0,2:1,3:0,4:1,5:0,6:1,7:0}
+    classical_state = 0
+    super_operator_demension = 2
+    Q_prim = dict()
+    
+    for key, value in Q.items():
+        Q_prim[key] = create_from_matrix_representation(np.array(value))
+    
+    Q = Q_prim
+        
+    print(pqmc_values(states, Q, pri, classical_state, super_operator_demension))
+    
