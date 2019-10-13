@@ -20,6 +20,16 @@
 
 package epmc.propertysolver;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -40,7 +50,6 @@ import epmc.expression.standard.ExpressionIdentifier;
 import epmc.expression.standard.ExpressionLiteral;
 import epmc.expression.standard.ExpressionOperator;
 import epmc.expression.standard.ExpressionQuantifier;
-import epmc.expression.standard.ExpressionTemporalFinally;
 import epmc.expression.standard.ExpressionTypeInteger;
 import epmc.graph.CommonProperties;
 import epmc.graph.StateMap;
@@ -102,7 +111,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         graph.explore(forStatesExplicit.getStatesExplicit());
         ExpressionQuantifier propertyQuantifier = (ExpressionQuantifier) property;
         Expression quantifiedProp = propertyQuantifier.getQuantified();
-        System.out.println(quantifiedProp);
+//        System.out.println(quantifiedProp);
         DirType dirType = ExpressionQuantifier.computeQuantifierDirType(propertyQuantifier);
         StateMap result = doSolve(quantifiedProp, forStates, dirType.isMin());
         
@@ -115,14 +124,54 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         }
         return result;
     }
+    
+    private void genScript(File tmpFile) throws IOException {
+    	//读取文件(字符流)
+        //写入相应的文件
+        BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(tmpFile)));
+    	BufferedReader in = new BufferedReader(new InputStreamReader(this.getClass().getResourceAsStream("/qmc.py")));
+    	String line = "";
+    	while ((line = in.readLine()) != null) {
+    		out.write(line);
+    		out.newLine();
+    	}
+        out.flush();
+        in.close();
+        out.close();
+    }
 
     private StateMap doSolve(Expression property, StateSet states, boolean min) {
     	this.forStates = (StateSetExplicit) forStates;
     	Expression[] expressions = UtilQLTL.collectQLTLInner(property).toArray(new Expression[0]);
     	ParityAutomaton pa = DeterminisationUtilAutomaton.newParityAutomaton(property, expressions);
-    	System.out.println(pa.getBuechi().getGraph());
-        System.out.println(this.graph);
-        product(pa);
+//    	System.out.println(pa.getBuechi().getGraph());
+//        System.out.println(this.graph);
+        Map<String, String> res = product(pa);
+//      for (String key : res.keySet()) {
+//    		System.out.println(key + " -> " + res.get(key));
+//    	}
+        try {
+        	File script = new File("t.py");
+        	System.out.println(script.getAbsolutePath());
+        	genScript(script);
+        	String[] testArgs = new String[] {"python3", script.getAbsolutePath(), res.get("stateStr"), res.get("qStr"),
+        			res.get("priStr"), res.get("classicalStateStr"), res.get("dimensionStr")};
+	        Process proc = Runtime.getRuntime().exec(testArgs);// 执行py文件
+	        // OUT
+	        BufferedReader in = new BufferedReader(new InputStreamReader(proc.  getInputStream()));
+	        String line = null;
+	        while ((line = in.readLine()) != null) {
+	            System.out.println(line);
+	        }
+	        in.close();
+	        proc.waitFor();
+	        script.delete();
+	    } catch (IOException e) {
+	        e.printStackTrace();
+	    } catch (InterruptedException e) {
+	        e.printStackTrace();
+	    }
+        // TODO: return result
         System.exit(0);
         return null;
     }
@@ -215,11 +264,37 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     }
     
     private String getMatrix(String str) {
-    	if (str.contains("matrix")) {
-    		return "[[]]";
-    	}
     	String matrixStr = "[";
+    	// TODO: format
+    	if (str.contains("matrix-unspec-dim")) {
+    		if (dimension != -1) {
+    			for (int i = 0; i < dimension; i++) {
+    				String vecStr = "[";
+    				for (int j = 0; j < dimension-1; j++) {
+    					vecStr += "1.0000000+0.0000000j, ";
+    				}
+    				vecStr += "1.0000000+0.0000000j";
+    				if (i < dimension-1) {
+    					vecStr += "],";
+    				} else {
+    					vecStr += "]";
+    				}
+    				matrixStr += vecStr;
+    			}
+    			matrixStr += "]";
+    			return matrixStr;
+    		} else {
+    			return "[[]]";
+    		}
+    	}
+    	
     	String[] strs = str.split("\n");
+    	if (dimension == -1) {
+    		dimension = strs.length - 1;
+    	} else if (dimension != strs.length - 1) {
+    		// Exception
+    		return "";
+    	}
     	for (int i = 1; i < strs.length; i++) {
     		String vecStr = "[";
     		String[] vecStrs = strs[i].substring(4).split("  ");
@@ -246,8 +321,10 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     	return matrixStr;
     }
     
-    private String[] product(Automaton automaton) {
-    	String[] res = new String[4];
+    private int dimension = -1; // TODO: delete
+    
+    private  Map<String, String> product(Automaton automaton) {
+    	Map<String, String> res = new HashMap<String, String>();
     	Map<Integer, Node2> stateMap= new HashMap<Integer, Node2>();
     	Map<Node2, Integer> map = new HashMap<Node2, Integer>();
     	Set<ExpressionLiteral> all = getVariableValues();
@@ -308,52 +385,12 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     	}
     	mapStr = mapStr.substring(0, mapStr.length() - 1);
     	mapStr += "}";
-    	res[0] = states.toString();
-    	res[1] = Q;
-    	res[2] = mapStr;
-    	res[3] = initStates.toString();
-    	for (String str : res) {
-    		System.out.println(str);
-    	}
+    	res.put("stateStr", states.toString());
+    	res.put("qStr", Q);
+    	res.put("priStr", mapStr);
+    	res.put("classicalStateStr", initStates.get(0).toString());
+    	res.put("dimensionStr", "2");
     	return res;
-//    	
-//    	
-//    	for (Object propName : graph.getNodeProperties()) {
-//    		if (propName instanceof ExpressionIdentifierStandard) {
-//    			NodeProperty prop = graph.getNodeProperty(propName);
-//    		}
-//    	}
-//    	
-//    	Expression[] expressions = automaton.getExpressions();
-//    	//expressionProps = new NodeProperty[expressions.length];
-//    	for (int exprNr = 0; exprNr < expressions.length; exprNr++) {
-//    		Expression exp = expressions[exprNr];
-//    		System.out.println("********************");
-//			System.out.println(modelChecker.getRequiredNodeProperties(exp, forStates));
-//			System.out.println("********************");
-//			System.out.println(exp);
-//        }
-//    	
-//    	System.out.println(((ValueObject) (automaton.getBuechi().getGraph().getEdgeProperty(CommonProperties.AUTOMATON_LABEL).get(0, 1))));
-//        ProductGraphExplicit prodGraph = new ProductGraphExplicit.Builder()
-//                .setModel(graph)
-//                //.setModelInitialNodes(forStates.getStatesExplicit())
-//                .setAutomaton(automaton)
-//                .addGraphProperties(graph.getGraphProperties())
-//                .addNodeProperty(CommonProperties.PLAYER)
-//                .addNodeProperty(CommonProperties.STATE)
-//                .addEdgeProperty(CommonProperties.WEIGHT)
-//                .build();
-//        GraphExplicitWrapper prodWrapper = new GraphExplicitWrapper(prodGraph);
-//        prodWrapper.addDerivedGraphProperties(prodGraph.getGraphProperties());
-//        prodWrapper.addDerivedNodeProperty(CommonProperties.STATE);
-//        prodWrapper.addDerivedNodeProperty(CommonProperties.PLAYER);
-//        prodWrapper.addDerivedNodeProperty(CommonProperties.AUTOMATON_LABEL);
-//        prodWrapper.addDerivedNodeProperty(CommonProperties.NODE_AUTOMATON);
-//        prodWrapper.addDerivedNodeProperty(CommonProperties.NODE_MODEL);
-//        prodWrapper.addDerivedEdgeProperty(CommonProperties.WEIGHT);
-//        prodWrapper.explore();
-//        System.out.println(prodWrapper);
     }
 
     
@@ -364,9 +401,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         if (!(modelChecker.getEngine() instanceof EngineExplicit)) {
             return false;
         }
-        if (ExpressionTemporalFinally.is(property)) {
-        	return true;
-        }
+        
 //        Semantics semantics = modelChecker.getModel().getSemantics();
 //        if (!SemanticsDiscreteTime.isDiscreteTime(semantics)
 //                && !SemanticsContinuousTime.isContinuousTime(semantics)) {
@@ -391,7 +426,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
 //        if (allStates != null) {
 //            allStates.close();
 //        }
-        return false;
+        return true;
     }
 
     
@@ -408,9 +443,11 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         required.add(CommonProperties.STATE);
         required.add(CommonProperties.PLAYER);
         // System.out.println("property: " + property);
-        // ExpressionQuantifier propertyQuantifier = (ExpressionQuantifier) property;
-        Set<Expression> inners = UtilQLTL.collectQLTLInner(property); // propertyQuantifier.getQuantified()
+        ExpressionQuantifier propertyQuantifier = (ExpressionQuantifier) property;
+        Expression quantified = propertyQuantifier.getQuantified();
+        Set<Expression> inners = UtilQLTL.collectQLTLInner(quantified); // propertyQuantifier.getQuantified()
         StateSet allStates = UtilGraph.computeAllStatesExplicit(modelChecker.getLowLevel());
+        
         for (Expression inner : inners) {
             required.addAll(modelChecker.getRequiredNodeProperties(inner, allStates));
         }
