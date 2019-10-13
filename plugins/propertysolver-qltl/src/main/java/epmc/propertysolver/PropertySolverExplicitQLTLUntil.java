@@ -52,6 +52,9 @@ import epmc.expression.standard.ExpressionOperator;
 import epmc.expression.standard.ExpressionQuantifier;
 import epmc.expression.standard.ExpressionTypeInteger;
 import epmc.graph.CommonProperties;
+import epmc.graph.Semantics;
+import epmc.graph.SemanticsContinuousTime;
+import epmc.graph.SemanticsDiscreteTime;
 import epmc.graph.StateMap;
 import epmc.graph.StateSet;
 import epmc.graph.UtilGraph;
@@ -106,22 +109,22 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     public StateMap solve() {
         assert property != null;
         assert forStates != null;
-        assert property instanceof ExpressionQuantifier;
+        // assert property instanceof ExpressionQuantifier;
+        System.out.println("property: " + property);
         StateSetExplicit forStatesExplicit = (StateSetExplicit) forStates;
         graph.explore(forStatesExplicit.getStatesExplicit());
-        ExpressionQuantifier propertyQuantifier = (ExpressionQuantifier) property;
-        Expression quantifiedProp = propertyQuantifier.getQuantified();
+        // ExpressionQuantifier propertyQuantifier = (ExpressionQuantifier) property;
+        // Expression quantifiedProp = propertyQuantifier.getQuantified();
 //        System.out.println(quantifiedProp);
-        DirType dirType = ExpressionQuantifier.computeQuantifierDirType(propertyQuantifier);
-        StateMap result = doSolve(quantifiedProp, forStates, dirType.isMin());
+        StateMap result = doSolve(property, forStates);
         
         
-        if (!propertyQuantifier.getCompareType().isIs()) {
-            StateMap compare = modelChecker.check(propertyQuantifier.getCompare(), forStates);
-            Operator op = propertyQuantifier.getCompareType().asExOpType();
-            assert op != null;
-            result = result.applyWith(op, compare);
-        }
+//        if (!propertyQuantifier.getCompareType().isIs()) {
+//            StateMap compare = modelChecker.check(propertyQuantifier.getCompare(), forStates);
+//            Operator op = propertyQuantifier.getCompareType().asExOpType();
+//            assert op != null;
+//            result = result.applyWith(op, compare);
+//        }
         return result;
     }
     
@@ -140,22 +143,22 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         out.close();
     }
 
-    private StateMap doSolve(Expression property, StateSet states, boolean min) {
+    private StateMap doSolve(Expression property, StateSet states) {
     	this.forStates = (StateSetExplicit) forStates;
     	Expression[] expressions = UtilQLTL.collectQLTLInner(property).toArray(new Expression[0]);
     	ParityAutomaton pa = DeterminisationUtilAutomaton.newParityAutomaton(property, expressions);
 //    	System.out.println(pa.getBuechi().getGraph());
 //        System.out.println(this.graph);
         Map<String, String> res = product(pa);
-//      for (String key : res.keySet()) {
-//    		System.out.println(key + " -> " + res.get(key));
-//    	}
+        for (String key : res.keySet()) {
+    		System.out.println(key + " -> " + res.get(key));
+    	}
         try {
         	File script = new File("t.py");
         	System.out.println(script.getAbsolutePath());
         	genScript(script);
         	String[] testArgs = new String[] {"python3", script.getAbsolutePath(), res.get("stateStr"), res.get("qStr"),
-        			res.get("priStr"), res.get("classicalStateStr"), res.get("dimensionStr")};
+        			res.get("priStr"), res.get("classicalStateStr")};
 	        Process proc = Runtime.getRuntime().exec(testArgs);// 执行py文件
 	        // OUT
 	        BufferedReader in = new BufferedReader(new InputStreamReader(proc.  getInputStream()));
@@ -389,7 +392,6 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     	res.put("qStr", Q);
     	res.put("priStr", mapStr);
     	res.put("classicalStateStr", initStates.get(0).toString());
-    	res.put("dimensionStr", "2");
     	return res;
     }
 
@@ -399,6 +401,14 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     	// TODO: the conditions for QLTLSolver
         assert property != null;
         if (!(modelChecker.getEngine() instanceof EngineExplicit)) {
+            return false;
+        }
+        Semantics semantics = modelChecker.getModel().getSemantics();
+        if (!SemanticsDiscreteTime.isDiscreteTime(semantics)
+                && !SemanticsContinuousTime.isContinuousTime(semantics)) {
+            return false;
+        }
+        if (ExpressionQuantifier.is(property)) {
             return false;
         }
         
@@ -443,9 +453,9 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         required.add(CommonProperties.STATE);
         required.add(CommonProperties.PLAYER);
         // System.out.println("property: " + property);
-        ExpressionQuantifier propertyQuantifier = (ExpressionQuantifier) property;
-        Expression quantified = propertyQuantifier.getQuantified();
-        Set<Expression> inners = UtilQLTL.collectQLTLInner(quantified); // propertyQuantifier.getQuantified()
+        // ExpressionQuantifier propertyQuantifier = (ExpressionQuantifier) property;
+        // Expression quantified = propertyQuantifier.getQuantified();
+        Set<Expression> inners = UtilQLTL.collectQLTLInner(property); // propertyQuantifier.getQuantified()
         StateSet allStates = UtilGraph.computeAllStatesExplicit(modelChecker.getLowLevel());
         
         for (Expression inner : inners) {
