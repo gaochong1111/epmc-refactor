@@ -4,10 +4,12 @@ Created on 2019年8月1日
 @author: chenyan
 '''
 import numpy as np
+import sys
 np.set_printoptions(threshold=np.inf)
 from scipy.linalg.decomp_svd import orth
 from scipy.constants.constants import epsilon_0
 from scipy.linalg import null_space
+from ast import literal_eval
 
 '''
 COMMON
@@ -180,11 +182,11 @@ def get_orth_complement(projector):
     return res
 
 
-
 class SuperOperator:
     '''
     super operator
     '''
+    
     def __init__(self, kraus=[]):
         '''
         Constructor
@@ -229,6 +231,13 @@ class SuperOperator:
             res += np.kron(self.kraus[i], np.conjugate(self.kraus[i]))
         return res
     
+    def get_dual_super_operator(self):
+        kraus = self.kraus
+        dual_kraus = []
+        for operator in kraus:
+            dual_kraus.append(np.matrix(operator).H)
+        return SuperOperator(dual_kraus)
+    
     def get_positive_eigen_operators(self):
         '''
         Get a (complete, but not necessarily linear independent) set of 
@@ -257,7 +266,7 @@ class SuperOperator:
                     res.append(image_positive)
                 if not is_zero_array(image_negative):
                     res.append(image_negative)
-                    
+         
         return res
     
     def apply_on_operator(self, operator):
@@ -342,7 +351,6 @@ class SuperOperator:
 
     def get_bscc(self, projector):
         matrix_representation = np.kron(projector, np.conjugate(projector)) * self.get_matrix_representation()
-        
         pro_so = create_from_matrix_representation(matrix_representation)
         
         fix_points = pro_so.get_positive_eigen_operators()
@@ -415,8 +423,9 @@ class SuperOperator:
                 period = period + 1
         
         return self.power(period).get_bscc(bscc)   
- 
-
+        
+        
+        
 def create_from_choi_representation(matrix):
     if not is_square(matrix):
         print("Matrix is not a square!")
@@ -441,8 +450,6 @@ def create_from_choi_representation(matrix):
     
     return SuperOperator(kraus)
 
-
-
 def create_from_matrix_representation(matrix):
     if not is_square(matrix):
         print("Matrix is not a square!")
@@ -466,51 +473,43 @@ def create_from_matrix_representation(matrix):
     return create_from_choi_representation(choi_matrix)
 
 
-
-
-def pqmc_values(states, Q, pri, classical_state, super_operator_demension):
+def pqmc_values(states, Q, pri, classical_state):
     if classical_state > np.max(states):
         print('The classical state index out of range!')
         return
     
+    if len(Q) == 0:
+        print("Q is null!")
+        return
+    
+    super_operator_demension = list(Q.values())[0].dimension
     state_demension = np.max(states) + 1
     I_c = np.eye(state_demension, state_demension, dtype = np.complex)
     I_H = np.eye(super_operator_demension, super_operator_demension, dtype=np.complex)
     
-    E_s = np.kron(I_c[classical_state].reshape([state_demension, 1]), I_H)
-    M_s = np.kron(E_s, np.conjugate(E_s))
-#     print("M_s:")
-#     print(M_s.shape)
-    
-    M_c = np.zeros([super_operator_demension ** 2, (super_operator_demension ** 2) * (state_demension ** 2)], dtype=np.complex)
-    for s in states:
-        E = np.kron(I_c[s].reshape([1, state_demension]), I_H)
-        M_c += np.kron(E, np.conjugate(E))
-#     print("M_c:")
-#     print(M_c.shape)
-    
-    M = np.zeros([(super_operator_demension ** 2) * (state_demension ** 2), (super_operator_demension ** 2) * (state_demension ** 2)], dtype=np.complex)
+    # compute epsilon_m
+    epsilon_m = np.zeros([(super_operator_demension ** 2) * (state_demension ** 2), (super_operator_demension ** 2) * (state_demension ** 2)], dtype=np.complex)
     for key, value in Q.items():
         E_i_kraus = value.kraus
         adjacency_matrix = np.zeros([state_demension, state_demension], dtype=np.complex)
         adjacency_matrix[key[1], key[0]] = 1.0
         for e in E_i_kraus:
             E = np.kron(adjacency_matrix, e)
-            M += np.kron(E, np.conjugate(E))
-#     print("M:")
-#     print(M.shape)
+            epsilon_m += np.kron(E, np.conjugate(E))
     
-    super_operator_M = create_from_matrix_representation(M)
-    M_infinite = super_operator_M.infinity().get_matrix_representation()
-#     print("M_infinite:")
-#     print(M_infinite)
+    # compute epsilon_m_infinity
+    epsilon_m_so = create_from_matrix_representation(epsilon_m)
+    epsilon_m_infinity_so = epsilon_m_so.infinity()
+    print("M_infinite:")
+    print(epsilon_m_infinity_so.get_matrix_representation())
     
-    M_even = np.zeros([(super_operator_demension ** 2) * (state_demension ** 2), (super_operator_demension ** 2) * (state_demension ** 2)], dtype=np.complex)
+    #compute P_even
+    P_even = np.zeros([super_operator_demension * state_demension, super_operator_demension * state_demension], dtype=np.complex)
     bscc_min_pri_key = []
     bscc_min_pri_value = []
-    B = super_operator_M.get_bscc(np.kron(I_c, I_H))
-#     print("B:")
-#     print(B)
+    B = epsilon_m_so.get_bscc(np.kron(I_c, I_H))
+    print("B:")
+    print(B)
     for b in B:
         C_b = []
         vecs = orth(b)
@@ -526,25 +525,25 @@ def pqmc_values(states, Q, pri, classical_state, super_operator_demension):
                         flag = False
                         break
             if flag:
-                C_b.append(nonzero_index)
+                C_b.append(pri[nonzero_index])
         bscc_min_pri_key.append(b)
         bscc_min_pri_value.append(np.min(C_b))
     EP = set()
-    # print(pri)
     for key, value in pri.items():
         if value % 2 == 0:
-            EP.add(key)
+            EP.add(value)
     for k in EP:
         P_k = np.zeros([super_operator_demension * state_demension, super_operator_demension * state_demension], dtype=np.complex)
         for i in range(len(bscc_min_pri_key)):
             if bscc_min_pri_value[i] == k:
                 P_k += bscc_min_pri_key[i]
-        M_even += np.kron(P_k, P_k)
+        P_even += P_k
     
-    M_c = np.matrix(M_c)
-    M_even = np.matrix(M_even)
-    M_s = np.matrix(M_s)
-    return M_c * M_even * M_infinite * M_s 
+    M = epsilon_m_infinity_so.get_dual_super_operator().apply_on_operator(P_even)
+    E_s_bra = np.matrix(np.kron(I_c[classical_state].reshape([1, state_demension]), I_H))
+    E_s_ket = np.matrix(np.kron(I_c[classical_state].reshape([state_demension, 1]), I_H))
+    return E_s_bra * M * E_s_ket
+
         
 '''
 states: int set
@@ -554,12 +553,27 @@ classical_state: int
 super_operator_demension: int
 '''
 if __name__ == '__main__':
-    print("Hello!")
+    '''
+    identity = np.eye(16, 16, dtype = np.complex)
+    so = create_from_matrix_representation(identity)
+    print(so.infinity().get_matrix_representation())
     states = np.array([0, 1, 2, 3, 4, 5, 6, 7])
     Q = {(2,4):[[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j]],(2,6):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j]],(6,6):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j]],(0,3):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.5000000+0.0000000j],[0.0000000+0.0000000j,0.7071068+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.7071068+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.5000000+0.0000000j]],(4,3):[[ 0.5000000+0.0000000j, 0.5000000+0.0000000j, 0.5000000+0.0000000j, 0.5000000+0.0000000j],[ 0.5000000+0.0000000j,-0.5000000+0.0000000j, 0.5000000+0.0000000j,-0.5000000+0.0000000j],[ 0.5000000+0.0000000j, 0.5000000+0.0000000j,-0.5000000+0.0000000j,-0.5000000+0.0000000j],[ 0.5000000+0.0000000j,-0.5000000+0.0000000j,-0.5000000+0.0000000j, 0.5000000+0.0000000j]],(1,3):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.5000000+0.0000000j],[0.0000000+0.0000000j,0.7071068+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.7071068+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.5000000+0.0000000j]],(3,5):[[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j]],(3,7):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j]],(5,3):[[ 0.5000000+0.0000000j, 0.5000000+0.0000000j, 0.5000000+0.0000000j, 0.5000000+0.0000000j],[ 0.5000000+0.0000000j,-0.5000000+0.0000000j, 0.5000000+0.0000000j,-0.5000000+0.0000000j],[ 0.5000000+0.0000000j, 0.5000000+0.0000000j,-0.5000000+0.0000000j,-0.5000000+0.0000000j],[ 0.5000000+0.0000000j,-0.5000000+0.0000000j,-0.5000000+0.0000000j, 0.5000000+0.0000000j]],(7,7):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j]]}    
     pri = {0:1,1:0,2:1,3:0,4:1,5:0,6:1,7:0}
     classical_state = 0
-    super_operator_demension = 2
+    '''
+    print("hello")
+    print(str(sys.argv[1]))
+    states = np.array(literal_eval(str(sys.argv[1])))
+    print(states)
+    Q = literal_eval(str(sys.argv[2]))
+ 
+    print(Q)
+    pri = literal_eval(str(sys.argv[3]))
+    print(pri)
+    classical_state = literal_eval(str(sys.argv[4]))
+    print(classical_state)
+    
     Q_prim = dict()
     
     for key, value in Q.items():
@@ -567,5 +581,4 @@ if __name__ == '__main__':
     
     Q = Q_prim
         
-    print(pqmc_values(states, Q, pri, classical_state, super_operator_demension))
-    
+    print(pqmc_values(states, Q, pri, classical_state))
