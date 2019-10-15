@@ -500,20 +500,18 @@ def pqmc_values(states, Q, pri, classical_state):
     # compute epsilon_m_infinity
     epsilon_m_so = create_from_matrix_representation(epsilon_m)
     epsilon_m_infinity_so = epsilon_m_so.infinity()
-    print("M_infinite:")
-    print(epsilon_m_infinity_so.get_matrix_representation())
     
     #compute P_even
     P_even = np.zeros([super_operator_demension * state_demension, super_operator_demension * state_demension], dtype=np.complex)
     bscc_min_pri_key = []
     bscc_min_pri_value = []
     B = epsilon_m_so.get_bscc(np.kron(I_c, I_H))
-    print("B:")
-    print(B)
     for b in B:
+        print(b)
         C_b = []
         vecs = orth(b)
-        for vec in vecs:
+        for j in range(vecs.shape[1]):
+            vec = vecs[:, j]
             nonzero_index = -1
             flag = False
             for i in range(state_demension):
@@ -538,10 +536,14 @@ def pqmc_values(states, Q, pri, classical_state):
             if bscc_min_pri_value[i] == k:
                 P_k += bscc_min_pri_key[i]
         P_even += P_k
+    print("P_even:")
+    print(P_even)
     
     M = epsilon_m_infinity_so.get_dual_super_operator().apply_on_operator(P_even)
     E_s_bra = np.matrix(np.kron(I_c[classical_state].reshape([1, state_demension]), I_H))
     E_s_ket = np.matrix(np.kron(I_c[classical_state].reshape([state_demension, 1]), I_H))
+    print("M")
+    print(M)
     return E_s_bra * M * E_s_ket
 
         
