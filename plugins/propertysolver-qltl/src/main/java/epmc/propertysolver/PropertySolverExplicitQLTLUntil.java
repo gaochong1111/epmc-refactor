@@ -23,15 +23,11 @@ package epmc.propertysolver;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -46,7 +42,6 @@ import epmc.automata.determinisation.ParityAutomaton;
 import epmc.automaton.Automaton;
 import epmc.automaton.BuechiTransitionImpl;
 import epmc.expression.Expression;
-import epmc.expression.standard.DirType;
 import epmc.expression.standard.ExpressionIdentifier;
 import epmc.expression.standard.ExpressionLiteral;
 import epmc.expression.standard.ExpressionOperator;
@@ -114,24 +109,12 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         System.out.println("property: " + property);
         StateSetExplicit forStatesExplicit = (StateSetExplicit) forStates;
         graph.explore(forStatesExplicit.getStatesExplicit());
-        // ExpressionQuantifier propertyQuantifier = (ExpressionQuantifier) property;
-        // Expression quantifiedProp = propertyQuantifier.getQuantified();
-//        System.out.println(quantifiedProp);
         StateMap result = doSolve(property, forStates);
-        
-        
-//        if (!propertyQuantifier.getCompareType().isIs()) {
-//            StateMap compare = modelChecker.check(propertyQuantifier.getCompare(), forStates);
-//            Operator op = propertyQuantifier.getCompareType().asExOpType();
-//            assert op != null;
-//            result = result.applyWith(op, compare);
-//        }
         return result;
     }
     
     private void genScript(File tmpFile) throws IOException {
     	//读取文件(字符流)
-        //写入相应的文件
         BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(tmpFile)));
     	BufferedReader in = new BufferedReader(new InputStreamReader(this.getClass().getResourceAsStream("/qmc.py")));
     	String line = "";
@@ -151,31 +134,33 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
 //    	System.out.println(pa.getBuechi().getGraph());
 //        System.out.println(this.graph);
         Map<String, String> res = product(pa);
-        for (String key : res.keySet()) {
-    		System.out.println(key + " -> " + res.get(key));
-    	}
+//        for (String key : res.keySet()) {
+//    		System.out.println(key + " -> " + res.get(key));
+//    	}
         try {
         	File script = new File("t.py");
         	System.out.println(script.getAbsolutePath());
         	genScript(script);
         	String[] testArgs = new String[] {"python3", script.getAbsolutePath(), res.get("stateStr"), res.get("qStr"),
         			res.get("priStr"), res.get("classicalStateStr")};
-        	System.out.println(Arrays.toString(testArgs));
+        	// System.out.println(Arrays.toString(testArgs));
 	        Process proc = Runtime.getRuntime().exec(testArgs);// 执行py文件
 	        // OUT
 	        BufferedReader in = new BufferedReader(new InputStreamReader(proc.getInputStream()));
 	        
+	        // OutputStream from console
 	        String line = null;
 	        while ((line = in.readLine()) != null) {
 	            System.out.println(line);
 	        }
 	        in.close();
+	        // ErrorStream from console
 	        BufferedReader errIn = new BufferedReader(new InputStreamReader(proc.getErrorStream()));
 	        while ((line = errIn.readLine()) != null) {
 	            System.out.println(line);
 	        }
 	        errIn.close();
-	        
+	        // wait for sub-thread
 	        proc.waitFor();
 	        script.delete();
 	    } catch (IOException e) {
@@ -188,8 +173,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         return null;
     }
     
-    void getSet(Expression exp, Set<ExpressionLiteral> set, Set<ExpressionLiteral> all) {
-    	
+    private void getSet(Expression exp, Set<ExpressionLiteral> set, Set<ExpressionLiteral> all) {
     	if (exp instanceof ExpressionOperator) {
     		ExpressionOperator expression = (ExpressionOperator)exp;
 	    	Operator opt = expression.getOperator();
@@ -431,30 +415,6 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
             return false;
         }
         
-//        Semantics semantics = modelChecker.getModel().getSemantics();
-//        if (!SemanticsDiscreteTime.isDiscreteTime(semantics)
-//                && !SemanticsContinuousTime.isContinuousTime(semantics)) {
-//            return false;
-//        }
-//        if (!ExpressionQuantifier.is(property)) {
-//            return false;
-//        }
-        // handleSimplePCTLExtensions();
-//        ExpressionQuantifier propertyQuantifier = ExpressionQuantifier.as(property);
-//        if (!UtilPCTL.isPCTLPathUntil(propertyQuantifier.getQuantified())) {
-//            return false;
-//        }
-//        Set<Expression> inners = UtilPCTL.collectPCTLInner(propertyQuantifier.getQuantified());
-//        GraphExplicit graph = modelChecker.getLowLevel();
-//        System.out.println(graph);
-//        StateSet allStates = UtilGraph.computeAllStatesExplicit(graph);
-//        System.exit(0);
-//        for (Expression inner : inners) {
-//            modelChecker.ensureCanHandle(inner, allStates);
-//        }
-//        if (allStates != null) {
-//            allStates.close();
-//        }
         return true;
     }
 
@@ -471,10 +431,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         Set<Object> required = new LinkedHashSet<>();
         required.add(CommonProperties.STATE);
         required.add(CommonProperties.PLAYER);
-        // System.out.println("property: " + property);
-        // ExpressionQuantifier propertyQuantifier = (ExpressionQuantifier) property;
-        // Expression quantified = propertyQuantifier.getQuantified();
-        Set<Expression> inners = UtilQLTL.collectQLTLInner(property); // propertyQuantifier.getQuantified()
+        Set<Expression> inners = UtilQLTL.collectQLTLInner(property);
         StateSet allStates = UtilGraph.computeAllStatesExplicit(modelChecker.getLowLevel());
         
         for (Expression inner : inners) {
