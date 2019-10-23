@@ -37,74 +37,6 @@ def complex_equal(c1, c2):
         return False
     return True
 
-def is_jordan_block(matrix):
-    if not is_square(matrix):
-        return False
-    row_index = matrix.shape[0] - 1
-    for i in range(0, row_index):
-        if not complex_equal(matrix[i, i], matrix[i + 1, i + 1]):
-            return False
-    for k in range(0, row_index):
-        if not complex_equal(matrix[k, k + 1], 1.0 + 0.j):
-            return False
-    return True
-
-def jordan_eigen_value(J):
-    i = 0
-    eigen_value_map = dict()
-    while i < J.shape[1]:
-        start = i
-        for j in range(1, J.shape[1] - start + 1):
-            if is_jordan_block(J[start:start + j, start:start + j]):
-                eigen_value_map.setdefault(J[start, start], []).append((start, j))
-                i = i + j
-                break
-    return eigen_value_map
-
-def matrix_infinite(matrix):
-    print("begin")
-    P, J = Matrix(matrix).jordan_form()
-    print("J:")
-    print(J)
-    J = np.matrix(J).astype(np.complex)
-    P = np.matrix(P).astype(np.complex)
-    eigen_value_map = jordan_eigen_value(J)
-    res = np.zeros([J.shape[0], J.shape[1]], dtype=np.complex)
-    for key, value in eigen_value_map.items():
-        if complex_equal(key, 1.0 + 0.j):
-            for item in value:
-                jordan_block = np.zeros([J.shape[0], J.shape[1]], dtype=np.complex)
-                for i in range(item[1]):
-                    jordan_block[item[0] + i, item[0] + i] = key
-                for j in range(item[1] - 1):
-                    jordan_block[item[0] + j, item[0] + j + 1] = 1.0 + 0.j
-                res += jordan_block
-    return res
-    
-def check_std_ort(basis):
-    #subspace is null
-    if len(basis) == 0:
-        return False
-    
-    c0 = np.complex(0.0, 0.0) # 0.0 + 0.0j
-    c1 = np.complex(1.0, 0.0) # 1.0 + 0.0j
-    dimension = len(basis[0]) # dimension of subspace
-    index1_set = set() # 分量为1的下标集合
-    
-    for v in basis:
-        if len(v) != dimension:
-            return False
-        index0 = np.argwhere(v == c0) # TODO 视具体情况决定是否使用delta
-        index1 = np.argwhere(v == c1)
-        if index1.shape[0] != 1 or index0.shape[0] != dimension - 1:
-            return False
-        else:
-            index1 = index1[0][0]
-            if index1 in index1_set:
-                return False
-            else:
-                index1_set.add(index1)
-    return True
 
 def is_positive(operator):
     if not is_square(operator):
@@ -552,22 +484,10 @@ classical_state: int
 super_operator_demension: int
 '''
 if __name__ == '__main__':
-    '''
-    identity = np.eye(16, 16, dtype = np.complex)
-    so = create_from_matrix_representation(identity)
-    print(so.infinity().get_matrix_representation())
-    states = np.array([0, 1, 2, 3, 4, 5, 6, 7])
-    Q = {(2,4):[[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j]],(2,6):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j]],(6,6):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j]],(0,3):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.5000000+0.0000000j],[0.0000000+0.0000000j,0.7071068+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.7071068+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.5000000+0.0000000j]],(4,3):[[ 0.5000000+0.0000000j, 0.5000000+0.0000000j, 0.5000000+0.0000000j, 0.5000000+0.0000000j],[ 0.5000000+0.0000000j,-0.5000000+0.0000000j, 0.5000000+0.0000000j,-0.5000000+0.0000000j],[ 0.5000000+0.0000000j, 0.5000000+0.0000000j,-0.5000000+0.0000000j,-0.5000000+0.0000000j],[ 0.5000000+0.0000000j,-0.5000000+0.0000000j,-0.5000000+0.0000000j, 0.5000000+0.0000000j]],(1,3):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.5000000+0.0000000j],[0.0000000+0.0000000j,0.7071068+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.7071068+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.5000000+0.0000000j]],(3,5):[[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j]],(3,7):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j]],(5,3):[[ 0.5000000+0.0000000j, 0.5000000+0.0000000j, 0.5000000+0.0000000j, 0.5000000+0.0000000j],[ 0.5000000+0.0000000j,-0.5000000+0.0000000j, 0.5000000+0.0000000j,-0.5000000+0.0000000j],[ 0.5000000+0.0000000j, 0.5000000+0.0000000j,-0.5000000+0.0000000j,-0.5000000+0.0000000j],[ 0.5000000+0.0000000j,-0.5000000+0.0000000j,-0.5000000+0.0000000j, 0.5000000+0.0000000j]],(7,7):[[1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,1.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j,0.0000000+0.0000000j],[0.0000000+0.0000000j,0.0000000+0.0000000j,0.0000000+0.0000000j,1.0000000+0.0000000j]]}    
-    pri = {0:1,1:0,2:1,3:0,4:1,5:0,6:1,7:0}
-    classical_state = 0
-    '''
     print("hello")
-    print(str(sys.argv[1]))
+    # parse system arguments
     states = np.array(literal_eval(str(sys.argv[1])))
-    print(states)
     Q = literal_eval(str(sys.argv[2]))
- 
-    print(Q)
     pri = literal_eval(str(sys.argv[3]))
     print(pri)
     
@@ -577,10 +497,8 @@ if __name__ == '__main__':
     '''
     
     Q_prim = dict()
-    
     for key, value in Q.items():
         Q_prim[key] = create_from_matrix_representation(np.array(value))
-    
     Q = Q_prim
         
     print(pqmc_values(states, Q, pri))
