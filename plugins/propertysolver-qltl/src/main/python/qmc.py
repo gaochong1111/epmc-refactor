@@ -570,8 +570,11 @@ if __name__ == '__main__':
     print(Q)
     pri = literal_eval(str(sys.argv[3]))
     print(pri)
+    
+    '''
     classical_state = literal_eval(str(sys.argv[4]))
     print(classical_state)
+    '''
     
     Q_prim = dict()
     
@@ -580,4 +583,4 @@ if __name__ == '__main__':
     
     Q = Q_prim
         
-    print(pqmc_values(states, Q, pri, classical_state))
+    print(pqmc_values(states, Q, pri))
