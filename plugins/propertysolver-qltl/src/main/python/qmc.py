@@ -405,11 +405,7 @@ def create_from_matrix_representation(matrix):
     return create_from_choi_representation(choi_matrix)
 
 
-def pqmc_values(states, Q, pri, classical_state):
-    if classical_state > np.max(states):
-        print('The classical state index out of range!')
-        return
-    
+def pqmc_values(states, Q, pri):
     if len(Q) == 0:
         print("Q is null!")
         return
@@ -472,11 +468,12 @@ def pqmc_values(states, Q, pri, classical_state):
     print(P_even)
     
     M = epsilon_m_infinity_so.get_dual_super_operator().apply_on_operator(P_even)
-    E_s_bra = np.matrix(np.kron(I_c[classical_state].reshape([1, state_demension]), I_H))
-    E_s_ket = np.matrix(np.kron(I_c[classical_state].reshape([state_demension, 1]), I_H))
-    print("M")
-    print(M)
-    return E_s_bra * M * E_s_ket
+    res = dict()
+    for classical_state in states:
+        E_s_bra = np.matrix(np.kron(I_c[classical_state].reshape([1, state_demension]), I_H))
+        E_s_ket = np.matrix(np.kron(I_c[classical_state].reshape([state_demension, 1]), I_H))
+        res[classical_state] = E_s_bra * M * E_s_ket
+    return res
 
         
 '''
@@ -492,11 +489,16 @@ if __name__ == '__main__':
     states = np.array(literal_eval(str(sys.argv[1])))
     Q = literal_eval(str(sys.argv[2]))
     pri = literal_eval(str(sys.argv[3]))
+    print(pri)
+    
+    '''
     classical_state = literal_eval(str(sys.argv[4]))
+    print(classical_state)
+    '''
     
     Q_prim = dict()
     for key, value in Q.items():
         Q_prim[key] = create_from_matrix_representation(np.array(value))
     Q = Q_prim
         
-    print("result:\n {}\n".format(pqmc_values(states, Q, pri, classical_state)))
+    print(pqmc_values(states, Q, pri))
