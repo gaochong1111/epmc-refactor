@@ -5,6 +5,7 @@ Created on 2019年8月1日
 '''
 import numpy as np
 import sys
+from sympy.physics.units.definitions import electric_constant
 np.set_printoptions(threshold=np.inf)
 from scipy.linalg.decomp_svd import orth
 from scipy.constants.constants import epsilon_0
@@ -435,7 +436,7 @@ def pqmc_values(states, Q, pri):
     bscc_min_pri_value = []
     B = epsilon_m_so.get_bscc(np.kron(I_c, I_H))
     for b in B:
-        print(b)
+        # print(b)
         C_b = []
         vecs = orth(b)
         for j in range(vecs.shape[1]):
@@ -464,8 +465,8 @@ def pqmc_values(states, Q, pri):
             if bscc_min_pri_value[i] == k:
                 P_k += bscc_min_pri_key[i]
         P_even += P_k
-    print("P_even:")
-    print(P_even)
+    # print("P_even:")
+    # print(P_even)
     
     M = epsilon_m_infinity_so.get_dual_super_operator().apply_on_operator(P_even)
     res = dict()
@@ -475,7 +476,17 @@ def pqmc_values(states, Q, pri):
         res[classical_state] = E_s_bra * M * E_s_ket
     return res
 
+def get_matrix_str(m):
+    strs = []
+    print(m[0][0])
+    print(type(m[0][0]))
+    sys.exit(0)
+    # for row in np.asarray(m).tolist():
         
+        # strs.append(str(row));
+    
+    # return "#".join(strs)
+     
 '''
 states: int set
 Q: qmc (int, int): superoperator
@@ -484,12 +495,12 @@ classical_state: int
 super_operator_demension: int
 '''
 if __name__ == '__main__':
-    print("hello")
+    # print("hello")
     # parse system arguments
     states = np.array(literal_eval(str(sys.argv[1])))
     Q = literal_eval(str(sys.argv[2]))
     pri = literal_eval(str(sys.argv[3]))
-    print(pri)
+    #print(pri)
     
     '''
     classical_state = literal_eval(str(sys.argv[4]))
@@ -500,5 +511,8 @@ if __name__ == '__main__':
     for key, value in Q.items():
         Q_prim[key] = create_from_matrix_representation(np.array(value))
     Q = Q_prim
-        
-    print(pqmc_values(states, Q, pri))
+    
+    Q_res = pqmc_values(states, Q, pri)
+    #print(Q_res)
+    for (key, val) in Q_res.items():
+        print("{} : {};".format(key, str(val)))

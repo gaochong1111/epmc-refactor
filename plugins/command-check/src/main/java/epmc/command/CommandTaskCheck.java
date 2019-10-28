@@ -111,6 +111,7 @@ public class CommandTaskCheck implements CommandTask {
                     UtilError.fail(ProblemsEPMC.ERROR_WRITING_RESULT_OUTPUT, e);
                 }
             } else {
+            	System.out.println("=====================================================");
                 System.out.println(exprString + SPACE_COLON + resultString);
             }
             Scheduler scheduler = log.getScheduler(property);

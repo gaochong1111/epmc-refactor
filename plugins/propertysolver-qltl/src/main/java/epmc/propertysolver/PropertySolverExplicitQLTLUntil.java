@@ -67,6 +67,10 @@ import epmc.operator.OperatorEq;
 import epmc.operator.OperatorNot;
 import epmc.operator.OperatorOr;
 import epmc.qmc.model.ModelPRISMQMC;
+import epmc.qmc.value.TypeComplex;
+import epmc.qmc.value.TypeMatrix;
+import epmc.qmc.value.ValueComplex;
+import epmc.qmc.value.ValueMatrix;
 import epmc.value.TypeArray;
 import epmc.value.TypeWeight;
 import epmc.value.UtilValue;
@@ -81,6 +85,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     // private StateSetExplicit computeForStates;
     private Expression property;
     private StateSet forStates;
+    private int pa_initial;
 
     @Override
     public void setModelChecker(ModelChecker modelChecker) {
@@ -107,6 +112,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         assert forStates != null;
         // assert property instanceof ExpressionQuantifier;
         System.out.println("property: " + property);
+        // TODO: forStates is all states set in lowlevel
         StateSetExplicit forStatesExplicit = (StateSetExplicit) forStates;
         graph.explore(forStatesExplicit.getStatesExplicit());
         StateMap result = doSolve(property, forStates);
@@ -129,17 +135,19 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
 
     private StateMap doSolve(Expression property, StateSet states) {
     	this.forStates = (StateSetExplicit) forStates;
+    	int checkState = ((StateSetExplicit) states).getExplicitIthState(0);
+    	// System.out.println(checkState);
     	Expression[] expressions = UtilQLTL.collectQLTLInner(property).toArray(new Expression[0]);
     	ParityAutomaton pa = DeterminisationUtilAutomaton.newParityAutomaton(property, expressions);
 //    	System.out.println(pa.getBuechi().getGraph());
 //        System.out.println(this.graph);
         Map<String, String> res = product(pa);
-//        for (String key : res.keySet()) {
-//    		System.out.println(key + " -> " + res.get(key));
-//    	}
+        for (String key : res.keySet()) {
+    		System.out.println(key + " -> " + res.get(key));
+    	}
+        String resultStr = property.toString() + " : \n";
         try {
         	File script = new File("t.py");
-        	System.out.println(script.getAbsolutePath());
         	genScript(script);
         	String[] testArgs = new String[] {"python3", script.getAbsolutePath(), res.get("stateStr"), res.get("qStr"),
         			res.get("priStr"), res.get("classicalStateStr")};
@@ -151,7 +159,8 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
 	        // OutputStream from console
 	        String line = null;
 	        while ((line = in.readLine()) != null) {
-	            System.out.println(line);
+	            // System.out.println(line);
+	            resultStr += (line + "\n");
 	        }
 	        in.close();
 	        // ErrorStream from console
@@ -168,10 +177,52 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
 	    } catch (InterruptedException e) {
 	        e.printStackTrace();
 	    }
+        
+        
         // TODO: return result
+        System.out.println("=====================================================");
+        System.out.println(resultStr);
+        
+        // resultStr: key = (model_id * pa.size() + pa.inital_id)
+        StateSetExplicit checkStates = (StateSetExplicit) states;
+        System.out.println("states:" + checkStates);
+        ValueArray resultValues = UtilValue.newArray(TypeMatrix.get(TypeComplex.get()).getTypeArray(), checkStates.size()); // size: 1
+        // getValueArray(resultStr, resultValues, checkStates.size());
+        System.out.println(resultValues);
+        
         System.exit(0);
-        return null;
+        return UtilGraph.newStateMap(checkStates.clone(), resultValues);
     }
+    
+    private void getValueArray(String str, ValueArray value ) {
+    	str = str.substring(str.indexOf("\n") + 1);
+    	String[] strs = str.split(";\n");
+    	System.out.println(strs.length);
+    	for (int i = 0; i < strs.length; i++) {
+    		String[] mapStr = strs[i].split(":");
+    		//int state =  Integer.parseInt(mapStr[0].substring(0,mapStr[0].length()-1));
+    		ValueMatrix resultValue = new ValueMatrix(TypeMatrix.get(TypeComplex.get()));
+            getValueMatrix(mapStr[1], resultValue);
+            System.out.println(resultValue);
+            value.set(resultValue, i);
+    	}
+    }
+    
+    private void getValueMatrix(String str, ValueMatrix value) {
+    	System.out.println(str);
+    	String[] strs = str.split("\n");
+    	value.setDimensions(strs.length, strs.length);
+    	for (int i = 0; i < strs.length; i++) {
+    		String rowStr = strs[i].substring(strs[i].lastIndexOf('[')+1, strs[i].indexOf(']'));
+    		String[] rows = rowStr.split("j");
+    		for (int j = 0; j < rows.length; j++) {
+    			ValueComplex complex = UtilValue.newValue(TypeComplex.get(), 0);
+    			complex.set(rows[j]);
+    			value.set(complex, i, j);
+    		}
+    	}
+    }
+    
     
     private void getSet(Expression exp, Set<ExpressionLiteral> set, Set<ExpressionLiteral> all) {
     	if (exp instanceof ExpressionOperator) {
@@ -340,12 +391,10 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     	int numNodes = automaton.getBuechi().getGraph().getNumNodes();
     	int nodeNr = 0;
     	List<Integer> states = new ArrayList<Integer>();
-    	List<Integer> initStates = new ArrayList<Integer>();
     	for (int fromModel = 0; fromModel < graph.getNumNodes(); fromModel++) {
     		for (int fromPA = 0; fromPA < numNodes; fromPA++) {
-    			if (automaton.getBuechi().getGraph().getInitialNodes().get(fromPA) && 
-    					graph.getInitialNodes().get(fromModel))
-    				initStates.add(nodeNr); 
+    			if (automaton.getBuechi().getGraph().getInitialNodes().get(fromPA))
+    				pa_initial = fromPA;
     			states.add(nodeNr);
     			Node2 node2 = new Node2(fromModel, fromPA);
     			stateMap.put(nodeNr, node2);
@@ -394,7 +443,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     	res.put("stateStr", states.toString());
     	res.put("qStr", Q);
     	res.put("priStr", mapStr);
-    	res.put("classicalStateStr", initStates.get(0).toString());
+    	// res.put("classicalStateStr", ""+checkState);
     	return res;
     }
 
