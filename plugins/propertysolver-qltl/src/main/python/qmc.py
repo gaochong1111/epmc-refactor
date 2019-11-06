@@ -282,6 +282,7 @@ class SuperOperator:
         return array_equal(fix_points[0], projector)
 
     def get_bscc(self, projector):
+        print("get_bscc!")
         matrix_representation = np.kron(projector, np.conjugate(projector)) * self.get_matrix_representation()
         pro_so = create_from_matrix_representation(matrix_representation)
         
@@ -293,6 +294,8 @@ class SuperOperator:
         pop_index = []
         
         for i in range(len(fix_points) - 1):
+            print("i:")
+            print(i)
             support_i = get_support(fix_points[i])
             for j in range(i + 1, len(fix_points)):
                 if j in pop_index:
@@ -405,7 +408,7 @@ def create_from_matrix_representation(matrix):
     return create_from_choi_representation(choi_matrix)
 
 
-def pqmc_values(states, Q, pri):
+def pqmc_values(states, Q, pri, classical_state):
     if len(Q) == 0:
         print("Q is null!")
         return
@@ -426,16 +429,19 @@ def pqmc_values(states, Q, pri):
             epsilon_m += np.kron(E, np.conjugate(E))
     
     # compute epsilon_m_infinity
+    print("epsilon_m:")
+    print(epsilon_m.shape)
     epsilon_m_so = create_from_matrix_representation(epsilon_m)
-    epsilon_m_infinity_so = epsilon_m_so.infinity()
+    print("epsilon_m_so done!")
+    # epsilon_m_infinity_so = epsilon_m_so.infinity()
     
     #compute P_even
     P_even = np.zeros([super_operator_demension * state_demension, super_operator_demension * state_demension], dtype=np.complex)
     bscc_min_pri_key = []
     bscc_min_pri_value = []
     B = epsilon_m_so.get_bscc(np.kron(I_c, I_H))
+    print("epsilon_m_so bscc done!")
     for b in B:
-        print(b)
         C_b = []
         vecs = orth(b)
         for j in range(vecs.shape[1]):
@@ -467,13 +473,56 @@ def pqmc_values(states, Q, pri):
     print("P_even:")
     print(P_even)
     
-    M = epsilon_m_infinity_so.get_dual_super_operator().apply_on_operator(P_even)
-    res = dict()
-    for classical_state in states:
-        E_s_bra = np.matrix(np.kron(I_c[classical_state].reshape([1, state_demension]), I_H))
-        E_s_ket = np.matrix(np.kron(I_c[classical_state].reshape([state_demension, 1]), I_H))
-        res[classical_state] = E_s_bra * M * E_s_ket
-    return res
+    P_vec = np.zeros([(super_operator_demension ** 2) * (state_demension ** 2), 1], dtype=np.complex)
+    
+    for i in range(super_operator_demension):
+        i_ket = np.matrix(I_H[i].reshape([super_operator_demension, 1]))
+        for j in range(state_demension):
+            s_ket = I_c[j].reshape([state_demension, 1])
+            P_vec += np.kron(np.kron(s_ket, i_ket), np.kron(s_ket, i_ket))
+    P_vec = np.dot(np.kron(np.kron(P_even, I_c), I_H), P_vec)
+    print("P_vec:")
+    print(P_vec)
+    
+    eigen_values, eigen_vectors = np.linalg.eig(np.matrix(epsilon_m))
+    Y = list()
+    
+    for i in range(len(eigen_values)):
+        if complex_equal(eigen_values[i], 1.0 + 0.j):
+            Y.append(np.array(eigen_vectors[:, i]).reshape([-1, ]))
+    print("Y")
+    print(Y)
+    
+    v_ket = np.zeros([(super_operator_demension ** 2) * (state_demension ** 2), 1], dtype=np.complex)
+    for i in range(len(Y)):
+        coefficient = list()
+        for j in range(len(Y)):
+            if j != i:
+                coefficient.append(Y[j])
+        T_dual = np.array(np.matrix(epsilon_m).H - np.eye(epsilon_m.shape[0], epsilon_m.shape[1], dtype=np.complex))
+        for k in range(len(T_dual)):
+            coefficient.append(T_dual[k])
+        x_prim_ket = np.array(null_space(np.array(coefficient))[:, 0]).reshape([-1, ])
+        x_ket = x_prim_ket / np.inner(Y[i], x_prim_ket)
+        v_ket += (np.inner(Y[i], P_vec.reshape([-1, ])) * x_ket).reshape([-1, 1])
+    print("v_ket:")
+    print(v_ket)
+        
+    M = np.zeros([super_operator_demension * state_demension, super_operator_demension * state_demension], dtype=np.complex)
+    for i in range(super_operator_demension):
+        i_bra = I_H[i].reshape([1, super_operator_demension])
+        for j in range(state_demension):
+            s_bra = I_c[j].reshape([1, state_demension])
+            M += np.kron(np.dot(np.dot(np.kron(np.kron(np.kron(I_c, I_H), s_bra), i_bra), v_ket), s_bra), i_bra)
+    
+    # M = epsilon_m_infinity_so.get_dual_super_operator().apply_on_operator(P_even)
+    print("M:")
+    print(M)
+    
+    M = np.matrix(M)
+    E_s_ket = np.matrix(np.kron(I_c[classical_state].reshape([state_demension, 1]), I_H))
+    E_s_bra = np.matrix(np.kron(I_c[classical_state].reshape([1, state_demension]), I_H))
+    return E_s_bra * M * E_s_ket
 
         
 '''
@@ -485,20 +534,31 @@ super_operator_demension: int
 '''
 if __name__ == '__main__':
     print("hello")
+    '''
+    with open("key-distribution.txt") as f:
+        lines = f.readlines()
+    states = np.array(literal_eval(lines[0].strip().split("->")[1].strip()))
+    Q = literal_eval(lines[1].strip().split("->")[1].strip())
+    classical_state = literal_eval(lines[2].strip().split("->")[1].strip())
+    pri = literal_eval(lines[3].strip().split("->")[1].strip())
+    print(pri)
+    print(classical_state)
+    
     # parse system arguments
     states = np.array(literal_eval(str(sys.argv[1])))
     Q = literal_eval(str(sys.argv[2]))
     pri = literal_eval(str(sys.argv[3]))
-    print(pri)
-    
-    '''
     classical_state = literal_eval(str(sys.argv[4]))
-    print(classical_state)
     '''
+    
+    states = np.array([0, 1, 2])
+    Q = {(0, 0):[[0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,1.+0.j]], (0, 1):[[1.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j]], (1, 1):[[0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,1.+0.j]], (1, 2):[[1.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j]], (2, 2):[[0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,1.+0.j]], (2, 1):[[1.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j]]}
+    pri = {0:0,1:0,2:1}
+    classical_state = 2
     
     Q_prim = dict()
     for key, value in Q.items():
         Q_prim[key] = create_from_matrix_representation(np.array(value))
     Q = Q_prim
         
-    print(pqmc_values(states, Q, pri))
+    print(pqmc_values(states, Q, pri, classical_state))
