@@ -5,6 +5,7 @@ Created on 2019年8月1日
 '''
 import numpy as np
 import sys
+from configparser import ConfigParser
 from sympy.physics.units.definitions import electric_constant
 np.set_printoptions(threshold=np.inf)
 from scipy.linalg.decomp_svd import orth
@@ -478,14 +479,16 @@ def pqmc_values(states, Q, pri):
 
 def get_matrix_str(m):
     strs = []
-    print(m[0][0])
-    print(type(m[0][0]))
-    sys.exit(0)
-    # for row in np.asarray(m).tolist():
-        
-        # strs.append(str(row));
-    
-    # return "#".join(strs)
+    ma = np.asarray(m)
+    row, col = ma.shape
+    lines = []
+    for ri in range(0, row):
+        cs = []
+        for ci in range(0, col):
+            element = ma[ri][ci]
+            cs.append("{}+{}j".format(element.real, element.imag))
+        lines.append(",".join(cs))
+    return "$".join(lines)
      
 '''
 states: int set
@@ -495,12 +498,12 @@ classical_state: int
 super_operator_demension: int
 '''
 if __name__ == '__main__':
-    # print("hello")
-    # parse system arguments
-    states = np.array(literal_eval(str(sys.argv[1])))
-    Q = literal_eval(str(sys.argv[2]))
-    pri = literal_eval(str(sys.argv[3]))
-    #print(pri)
+    cfg = ConfigParser()
+    cfg.read(sys.argv[1], "utf8")
+    args = cfg["args"]
+    states = np.array(literal_eval(str(args["stateStr"])))
+    Q = literal_eval(str(args["qStr"]))
+    pri = literal_eval(str(args["priStr"]))
     
     '''
     classical_state = literal_eval(str(sys.argv[4]))
@@ -513,6 +516,6 @@ if __name__ == '__main__':
     Q = Q_prim
     
     Q_res = pqmc_values(states, Q, pri)
-    #print(Q_res)
     for (key, val) in Q_res.items():
-        print("{} : {};".format(key, str(val)))
+        print("{} : {}".format(key, get_matrix_str(val)))
+

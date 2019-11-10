@@ -135,22 +135,29 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
 
     private StateMap doSolve(Expression property, StateSet states) {
     	this.forStates = (StateSetExplicit) forStates;
-    	int checkState = ((StateSetExplicit) states).getExplicitIthState(0);
+    	// int checkState = ((StateSetExplicit) states).getExplicitIthState(0);
     	// System.out.println(checkState);
     	Expression[] expressions = UtilQLTL.collectQLTLInner(property).toArray(new Expression[0]);
     	ParityAutomaton pa = DeterminisationUtilAutomaton.newParityAutomaton(property, expressions);
 //    	System.out.println(pa.getBuechi().getGraph());
 //        System.out.println(this.graph);
         Map<String, String> res = product(pa);
-        for (String key : res.keySet()) {
-    		System.out.println(key + " -> " + res.get(key));
-    	}
-        String resultStr = property.toString() + " : \n";
+
+        String resultStr = ""; // = property.toString() + " : \n";
         try {
+        	File argFile = new File("args.ini");
+        	BufferedWriter argsWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(argFile)));
+        	
+        	argsWriter.write("[args]\n");
+        	for (String key : res.keySet()) {
+        		argsWriter.write(key + " = " + res.get(key));
+        		argsWriter.newLine();
+        	}
+        	argsWriter.close();
+        	
         	File script = new File("t.py");
         	genScript(script);
-        	String[] testArgs = new String[] {"python3", script.getAbsolutePath(), res.get("stateStr"), res.get("qStr"),
-        			res.get("priStr"), res.get("classicalStateStr")};
+        	String[] testArgs = new String[] {"python3", script.getAbsolutePath(), "args.ini"};
         	// System.out.println(Arrays.toString(testArgs));
 	        Process proc = Runtime.getRuntime().exec(testArgs);// 执行py文件
 	        // OUT
@@ -172,6 +179,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
 	        // wait for sub-thread
 	        proc.waitFor();
 	        script.delete();
+	        // argFile.delete();
 	    } catch (IOException e) {
 	        e.printStackTrace();
 	    } catch (InterruptedException e) {
@@ -180,43 +188,41 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         
         
         // TODO: return result
-        System.out.println("=====================================================");
-        System.out.println(resultStr);
-        
         // resultStr: key = (model_id * pa.size() + pa.inital_id)
         StateSetExplicit checkStates = (StateSetExplicit) states;
-        System.out.println("states:" + checkStates);
+        int key = pa.getNumStates() * checkStates.getExplicitStateNr(0) +  pa_initial;
+        // System.out.println("states:" + checkStates);
         ValueArray resultValues = UtilValue.newArray(TypeMatrix.get(TypeComplex.get()).getTypeArray(), checkStates.size()); // size: 1
-        // getValueArray(resultStr, resultValues, checkStates.size());
-        System.out.println(resultValues);
-        
-        System.exit(0);
+        getValueArray(resultStr, resultValues, key);
         return UtilGraph.newStateMap(checkStates.clone(), resultValues);
     }
     
-    private void getValueArray(String str, ValueArray value ) {
-    	str = str.substring(str.indexOf("\n") + 1);
-    	String[] strs = str.split(";\n");
-    	System.out.println(strs.length);
+    
+    private void getValueArray(String str, ValueArray resultValues, int key) {
+    	String[] strs = str.split("\n");
+    	// System.out.println(strs.length);
     	for (int i = 0; i < strs.length; i++) {
     		String[] mapStr = strs[i].split(":");
-    		//int state =  Integer.parseInt(mapStr[0].substring(0,mapStr[0].length()-1));
-    		ValueMatrix resultValue = new ValueMatrix(TypeMatrix.get(TypeComplex.get()));
-            getValueMatrix(mapStr[1], resultValue);
-            System.out.println(resultValue);
-            value.set(resultValue, i);
+    		int state =  Integer.parseInt(mapStr[0].substring(0,mapStr[0].length()-1));
+    		if (state == key) {
+    			ValueMatrix resultValue = new ValueMatrix(TypeMatrix.get(TypeComplex.get()));
+                getValueMatrix(mapStr[1], resultValue);
+                // System.out.println(resultValue);
+                resultValues.set(resultValue, i);
+    		}
     	}
     }
     
-    private void getValueMatrix(String str, ValueMatrix value) {
-    	System.out.println(str);
-    	String[] strs = str.split("\n");
-    	value.setDimensions(strs.length, strs.length);
-    	for (int i = 0; i < strs.length; i++) {
-    		String rowStr = strs[i].substring(strs[i].lastIndexOf('[')+1, strs[i].indexOf(']'));
-    		String[] rows = rowStr.split("j");
+    private void getValueMatrix(String mstr, ValueMatrix value) {
+    	// System.out.println("mstr: " + mstr);
+    	String[] lines = mstr.split("\\$");
+    	value.setDimensions(lines.length, lines.length);
+    	for (int i = 0; i < lines.length; i++) {
+    		// System.out.println("line: " + lines[i]);
+    		String[] rows = lines[i].split(",");
     		for (int j = 0; j < rows.length; j++) {
     			ValueComplex complex = UtilValue.newValue(TypeComplex.get(), 0);
+    			// System.out.println("complex str: " + rows[j]);
     			complex.set(rows[j]);
     			value.set(complex, i, j);
     		}

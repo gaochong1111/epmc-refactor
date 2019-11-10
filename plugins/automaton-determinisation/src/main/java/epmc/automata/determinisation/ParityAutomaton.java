@@ -74,7 +74,8 @@ public final class ParityAutomaton implements AutomatonParity, AutomatonSafra {
 
     @Override
     public int getNumStates() {
-        return inner.getNumStates();
+        // return inner.getNumStates();
+    	return priorityMap.size();
     }
 
     @Override
