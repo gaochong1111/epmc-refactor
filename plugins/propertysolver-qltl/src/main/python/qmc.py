@@ -408,7 +408,7 @@ def create_from_matrix_representation(matrix):
     return create_from_choi_representation(choi_matrix)
 
 
-def pqmc_values(states, Q, pri, classical_state):
+def pqmc_values(states, Q, pri):
     if len(Q) == 0:
         print("Q is null!")
         return
@@ -516,13 +516,15 @@ def pqmc_values(states, Q, pri, classical_state):
             M += np.kron(np.dot(np.dot(np.kron(np.kron(np.kron(I_c, I_H), s_bra), i_bra), v_ket), s_bra), i_bra)
     
     # M = epsilon_m_infinity_so.get_dual_super_operator().apply_on_operator(P_even)
-    print("M:")
-    print(M)
     
     M = np.matrix(M)
+    '''
     E_s_ket = np.matrix(np.kron(I_c[classical_state].reshape([state_demension, 1]), I_H))
     E_s_bra = np.matrix(np.kron(I_c[classical_state].reshape([1, state_demension]), I_H))
     return E_s_bra * M * E_s_ket
+    '''
+    return M
+    
 
         
 '''
@@ -561,4 +563,6 @@ if __name__ == '__main__':
         Q_prim[key] = create_from_matrix_representation(np.array(value))
     Q = Q_prim
         
-    print(pqmc_values(states, Q, pri, classical_state))
+    print(pqmc_values(states, Q, pri))
+    
+    
