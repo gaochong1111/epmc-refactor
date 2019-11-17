@@ -71,6 +71,7 @@ import epmc.qmc.value.TypeComplex;
 import epmc.qmc.value.TypeMatrix;
 import epmc.qmc.value.ValueComplex;
 import epmc.qmc.value.ValueMatrix;
+import epmc.util.BitSet;
 import epmc.value.TypeArray;
 import epmc.value.TypeWeight;
 import epmc.value.UtilValue;
@@ -111,10 +112,14 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
         assert property != null;
         assert forStates != null;
         // assert property instanceof ExpressionQuantifier;
-        System.out.println("property: " + property);
+        // System.out.println("property: " + property);
         // TODO: forStates is all states set in lowlevel
         StateSetExplicit forStatesExplicit = (StateSetExplicit) forStates;
         graph.explore(forStatesExplicit.getStatesExplicit());
+        // BitSet set = graph.getInitialNodes().clone();
+        // System.out.println("set size: " + set.size());
+        // set.set(0, set.size(), true);
+        // StateSet states = new StateSetExplicit(modelChecker.getLowLevel(), set);
         StateMap result = doSolve(property, forStates);
         return result;
     }
@@ -134,7 +139,7 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
     }
 
     private StateMap doSolve(Expression property, StateSet states) {
-    	this.forStates = (StateSetExplicit) forStates;
+    	// this.forStates = (StateSetExplicit) forStates;
     	// int checkState = ((StateSetExplicit) states).getExplicitIthState(0);
     	// System.out.println(checkState);
     	Expression[] expressions = UtilQLTL.collectQLTLInner(property).toArray(new Expression[0]);
@@ -179,36 +184,42 @@ public final class PropertySolverExplicitQLTLUntil implements PropertySolver {
 	        // wait for sub-thread
 	        proc.waitFor();
 	        script.delete();
-	        // argFile.delete();
+	        argFile.delete();
 	    } catch (IOException e) {
 	        e.printStackTrace();
 	    } catch (InterruptedException e) {
 	        e.printStackTrace();
 	    }
         
-        
+        // System.out.println(resultStr);
         // TODO: return result
         // resultStr: key = (model_id * pa.size() + pa.inital_id)
         StateSetExplicit checkStates = (StateSetExplicit) states;
-        int key = pa.getNumStates() * checkStates.getExplicitStateNr(0) +  pa_initial;
+        // System.out.println("size: " + checkStates.size());
+        Set<Integer> keySet = new HashSet<Integer>();
+        keySet.add(pa.getNumStates() * checkStates.getExplicitStateNr(0) +  pa_initial);
+//        for (int node = 0; node < graph.getNumNodes(); node++) {
+//        	keySet.add(pa.getNumStates() * checkStates.getExplicitStateNr(node) +  pa_initial);
+//        }
         // System.out.println("states:" + checkStates);
         ValueArray resultValues = UtilValue.newArray(TypeMatrix.get(TypeComplex.get()).getTypeArray(), checkStates.size()); // size: 1
-        getValueArray(resultStr, resultValues, key);
+        getValueArray(resultStr, resultValues, keySet);
+        
         return UtilGraph.newStateMap(checkStates.clone(), resultValues);
     }
     
     
-    private void getValueArray(String str, ValueArray resultValues, int key) {
+    private void getValueArray(String str, ValueArray resultValues, Set<Integer> keySet) {
     	String[] strs = str.split("\n");
     	// System.out.println(strs.length);
     	for (int i = 0; i < strs.length; i++) {
     		String[] mapStr = strs[i].split(":");
     		int state =  Integer.parseInt(mapStr[0].substring(0,mapStr[0].length()-1));
-    		if (state == key) {
+    		if (keySet.contains(state)) {
     			ValueMatrix resultValue = new ValueMatrix(TypeMatrix.get(TypeComplex.get()));
                 getValueMatrix(mapStr[1], resultValue);
-                // System.out.println(resultValue);
                 resultValues.set(resultValue, i);
+                // System.out.println(resultValue);
     		}
     	}
     }

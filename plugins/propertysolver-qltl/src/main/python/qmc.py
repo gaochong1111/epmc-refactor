@@ -5,13 +5,14 @@ Created on 2019年8月1日
 '''
 import numpy as np
 import sys
-from configparser import ConfigParser
-from sympy.physics.units.definitions import electric_constant
 np.set_printoptions(threshold=np.inf)
 from scipy.linalg.decomp_svd import orth
 from scipy.constants.constants import epsilon_0
 from scipy.linalg import null_space
 from ast import literal_eval
+from configparser import ConfigParser
+
+np.set_printoptions(suppress=True)
 
 '''
 COMMON
@@ -135,6 +136,7 @@ class SuperOperator:
         else:
             self._dimension = 0
         self._kraus = kraus
+        self._matrix_representation = None
         
     @property
     def kraus(self):
@@ -158,12 +160,20 @@ class SuperOperator:
     @dimension.setter
     def dimension(self, value):
         self._dimension = value
+        
+    @property
+    def matrix_representation(self):
+        if self._matrix_representation is None:
+            res = np.matrix(np.zeros(shape=[self.dimension ** 2, self.dimension ** 2],dtype=np.complex))
+            for i in range(len(self.kraus)):
+                res += np.kron(self.kraus[i], np.conjugate(self.kraus[i]))
+            return res
+        else:
+            return self._matrix_representation
     
-    def get_matrix_representation(self):
-        res = np.matrix(np.zeros(shape=[self.dimension ** 2, self.dimension ** 2],dtype=np.complex))
-        for i in range(len(self.kraus)):
-            res += np.kron(self.kraus[i], np.conjugate(self.kraus[i]))
-        return res
+    @matrix_representation.setter
+    def matrix_representation(self, value):
+        self._matrix_representation = value
     
     def get_dual_super_operator(self):
         kraus = self.kraus
@@ -181,8 +191,9 @@ class SuperOperator:
         if self.dimension == 0 or len(self.kraus) == 0:
             return res
 
-        matrix_representation = self.get_matrix_representation()
+        matrix_representation = self.matrix_representation
         
+        # eigen_values, eigen_vectors = np.linalg.eig(matrix_representation)
         eigen_values, eigen_vectors = np.linalg.eig(matrix_representation)
         
         for i in range(len(eigen_values)):
@@ -217,7 +228,7 @@ class SuperOperator:
         return res
     
     def product_super_operator(self, super_operator):
-        new_matrix = self.get_matrix_representation() * super_operator.get_matrix_representation()
+        new_matrix = self.matrix_representation * super_operator.matrix_representation
         return create_from_matrix_representation(new_matrix)
     
     def product_operator(self, operator):
@@ -244,9 +255,9 @@ class SuperOperator:
         return np.max(periods)
     
     def infinity(self):
-        this_matrix = self.get_matrix_representation()
+        this_matrix = self.matrix_representation
         start = 15
-        start_matrix = self.get_matrix_representation()
+        start_matrix = self.matrix_representation
         
         for _ in range(start):
             start_matrix = start_matrix * start_matrix
@@ -273,7 +284,7 @@ class SuperOperator:
         if not is_positive(projector - support):
             return False
         
-        matrix_representation = np.kron(projector, np.conjugate(projector)) * self.get_matrix_representation()
+        matrix_representation = np.kron(projector, np.conjugate(projector)) * self.matrix_representation
         
         pro_so = create_from_matrix_representation(matrix_representation)
         fix_points = pro_so.get_positive_eigen_operators()
@@ -284,7 +295,7 @@ class SuperOperator:
         return array_equal(fix_points[0], projector)
 
     def get_bscc(self, projector):
-        matrix_representation = np.kron(projector, np.conjugate(projector)) * self.get_matrix_representation()
+        matrix_representation = np.kron(projector, np.conjugate(projector)) * self.matrix_representation
         pro_so = create_from_matrix_representation(matrix_representation)
         
         fix_points = pro_so.get_positive_eigen_operators()
@@ -346,7 +357,7 @@ class SuperOperator:
             return res
         
         so = self.product_operator(bscc)
-        matrix_representation = so.get_matrix_representation()
+        matrix_representation = so.matrix_representation
         
         eigen_values, _ = np.linalg.eig(matrix_representation)
         
@@ -404,7 +415,9 @@ def create_from_matrix_representation(matrix):
                 for j in range(n_dimension):
                     choi_matrix[k * n_dimension + m, n * n_dimension +j] = matrix[k * n_dimension + n, m * n_dimension +j]
     
-    return create_from_choi_representation(choi_matrix)
+    res = create_from_choi_representation(choi_matrix)
+    res.matrix_representation = matrix
+    return res
 
 
 def pqmc_values(states, Q, pri):
@@ -428,8 +441,9 @@ def pqmc_values(states, Q, pri):
             epsilon_m += np.kron(E, np.conjugate(E))
     
     # compute epsilon_m_infinity
+    # print("epsilon_m:")
+    # print(epsilon_m.shape)
     epsilon_m_so = create_from_matrix_representation(epsilon_m)
-    epsilon_m_infinity_so = epsilon_m_so.infinity()
     
     #compute P_even
     P_even = np.zeros([super_operator_demension * state_demension, super_operator_demension * state_demension], dtype=np.complex)
@@ -437,7 +451,6 @@ def pqmc_values(states, Q, pri):
     bscc_min_pri_value = []
     B = epsilon_m_so.get_bscc(np.kron(I_c, I_H))
     for b in B:
-        # print(b)
         C_b = []
         vecs = orth(b)
         for j in range(vecs.shape[1]):
@@ -469,13 +482,60 @@ def pqmc_values(states, Q, pri):
     # print("P_even:")
     # print(P_even)
     
-    M = epsilon_m_infinity_so.get_dual_super_operator().apply_on_operator(P_even)
+    P_vec = np.zeros([(super_operator_demension ** 2) * (state_demension ** 2), 1], dtype=np.complex)
+    
+    for i in range(super_operator_demension):
+        i_ket = np.matrix(I_H[i].reshape([super_operator_demension, 1]))
+        for j in range(state_demension):
+            s_ket = I_c[j].reshape([state_demension, 1])
+            P_vec += np.kron(np.kron(s_ket, i_ket), np.kron(s_ket, i_ket))
+    P_vec = np.dot(np.kron(np.kron(P_even, I_c), I_H), P_vec)
+    # print("P_vec:")
+    # print(P_vec)
+    
+    eigen_values, eigen_vectors = np.linalg.eig(np.matrix(epsilon_m))
+    Y = list()
+    
+    for i in range(len(eigen_values)):
+        if complex_equal(eigen_values[i], 1.0 + 0.j):
+            Y.append(np.array(eigen_vectors[:, i]).reshape([-1, ]))
+    # print("Y")
+    # print(Y)
+    
+    v_ket = np.zeros([(super_operator_demension ** 2) * (state_demension ** 2), 1], dtype=np.complex)
+    for i in range(len(Y)):
+        coefficient = list()
+        for j in range(len(Y)):
+            if j != i:
+                coefficient.append(Y[j])
+        T_dual = np.array(np.matrix(epsilon_m).H - np.eye(epsilon_m.shape[0], epsilon_m.shape[1], dtype=np.complex))
+        for k in range(len(T_dual)):
+            coefficient.append(T_dual[k])
+        x_prim_ket = np.array(null_space(np.array(coefficient))[:, 0]).reshape([-1, ])
+        x_ket = x_prim_ket / np.inner(Y[i], x_prim_ket)
+        v_ket += (np.inner(Y[i], P_vec.reshape([-1, ])) * x_ket).reshape([-1, 1])
+    # print("v_ket:")
+    # print(v_ket)
+        
+    M = np.zeros([super_operator_demension * state_demension, super_operator_demension * state_demension], dtype=np.complex)
+    for i in range(super_operator_demension):
+        i_bra = I_H[i].reshape([1, super_operator_demension])
+        for j in range(state_demension):
+            s_bra = I_c[j].reshape([1, state_demension])
+            M += np.kron(np.dot(np.dot(np.kron(np.kron(np.kron(I_c, I_H), s_bra), i_bra), v_ket), s_bra), i_bra)
+    
+    # M = epsilon_m_infinity_so.get_dual_super_operator().apply_on_operator(P_even)
+    
+    M = np.matrix(M)
     res = dict()
-    for classical_state in states:
-        E_s_bra = np.matrix(np.kron(I_c[classical_state].reshape([1, state_demension]), I_H))
-        E_s_ket = np.matrix(np.kron(I_c[classical_state].reshape([state_demension, 1]), I_H))
-        res[classical_state] = E_s_bra * M * E_s_ket
+    for i in range(state_demension):
+        E_s_ket = np.matrix(np.kron(I_c[i].reshape([state_demension, 1]), I_H))
+        E_s_bra = np.matrix(np.kron(I_c[i].reshape([1, state_demension]), I_H))
+        res[i] = E_s_bra * M * E_s_ket
+    
     return res
+    
+    
 
 def get_matrix_str(m):
     strs = []
@@ -505,17 +565,11 @@ if __name__ == '__main__':
     Q = literal_eval(str(args["qStr"]))
     pri = literal_eval(str(args["priStr"]))
     
-    '''
-    classical_state = literal_eval(str(sys.argv[4]))
-    print(classical_state)
-    '''
-    
     Q_prim = dict()
     for key, value in Q.items():
         Q_prim[key] = create_from_matrix_representation(np.array(value))
     Q = Q_prim
-    
     Q_res = pqmc_values(states, Q, pri)
-    for (key, val) in Q_res.items():
-        print("{} : {}".format(key, get_matrix_str(val)))
+    for state in Q_res:
+        print("{} : {}".format(state, get_matrix_str(Q_res[state])))
 
