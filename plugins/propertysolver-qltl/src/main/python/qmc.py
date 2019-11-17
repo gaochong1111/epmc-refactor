@@ -11,6 +11,8 @@ from scipy.constants.constants import epsilon_0
 from scipy.linalg import null_space
 from ast import literal_eval
 
+np.set_printoptions(suppress=True)
+
 '''
 COMMON
 '''
@@ -133,6 +135,7 @@ class SuperOperator:
         else:
             self._dimension = 0
         self._kraus = kraus
+        self._matrix_representation = None
         
     @property
     def kraus(self):
@@ -156,12 +159,20 @@ class SuperOperator:
     @dimension.setter
     def dimension(self, value):
         self._dimension = value
+        
+    @property
+    def matrix_representation(self):
+        if self._matrix_representation is None:
+            res = np.matrix(np.zeros(shape=[self.dimension ** 2, self.dimension ** 2],dtype=np.complex))
+            for i in range(len(self.kraus)):
+                res += np.kron(self.kraus[i], np.conjugate(self.kraus[i]))
+            return res
+        else:
+            return self._matrix_representation
     
-    def get_matrix_representation(self):
-        res = np.matrix(np.zeros(shape=[self.dimension ** 2, self.dimension ** 2],dtype=np.complex))
-        for i in range(len(self.kraus)):
-            res += np.kron(self.kraus[i], np.conjugate(self.kraus[i]))
-        return res
+    @matrix_representation.setter
+    def matrix_representation(self, value):
+        self._matrix_representation = value
     
     def get_dual_super_operator(self):
         kraus = self.kraus
@@ -179,8 +190,9 @@ class SuperOperator:
         if self.dimension == 0 or len(self.kraus) == 0:
             return res
 
-        matrix_representation = self.get_matrix_representation()
+        matrix_representation = self.matrix_representation
         
+        # eigen_values, eigen_vectors = np.linalg.eig(matrix_representation)
         eigen_values, eigen_vectors = np.linalg.eig(matrix_representation)
         
         for i in range(len(eigen_values)):
@@ -215,7 +227,7 @@ class SuperOperator:
         return res
     
     def product_super_operator(self, super_operator):
-        new_matrix = self.get_matrix_representation() * super_operator.get_matrix_representation()
+        new_matrix = self.matrix_representation * super_operator.matrix_representation
         return create_from_matrix_representation(new_matrix)
     
     def product_operator(self, operator):
@@ -242,9 +254,9 @@ class SuperOperator:
         return np.max(periods)
     
     def infinity(self):
-        this_matrix = self.get_matrix_representation()
+        this_matrix = self.matrix_representation
         start = 15
-        start_matrix = self.get_matrix_representation()
+        start_matrix = self.matrix_representation
         
         for _ in range(start):
             start_matrix = start_matrix * start_matrix
@@ -271,7 +283,7 @@ class SuperOperator:
         if not is_positive(projector - support):
             return False
         
-        matrix_representation = np.kron(projector, np.conjugate(projector)) * self.get_matrix_representation()
+        matrix_representation = np.kron(projector, np.conjugate(projector)) * self.matrix_representation
         
         pro_so = create_from_matrix_representation(matrix_representation)
         fix_points = pro_so.get_positive_eigen_operators()
@@ -282,8 +294,7 @@ class SuperOperator:
         return array_equal(fix_points[0], projector)
 
     def get_bscc(self, projector):
-        print("get_bscc!")
-        matrix_representation = np.kron(projector, np.conjugate(projector)) * self.get_matrix_representation()
+        matrix_representation = np.kron(projector, np.conjugate(projector)) * self.matrix_representation
         pro_so = create_from_matrix_representation(matrix_representation)
         
         fix_points = pro_so.get_positive_eigen_operators()
@@ -294,8 +305,6 @@ class SuperOperator:
         pop_index = []
         
         for i in range(len(fix_points) - 1):
-            print("i:")
-            print(i)
             support_i = get_support(fix_points[i])
             for j in range(i + 1, len(fix_points)):
                 if j in pop_index:
@@ -347,7 +356,7 @@ class SuperOperator:
             return res
         
         so = self.product_operator(bscc)
-        matrix_representation = so.get_matrix_representation()
+        matrix_representation = so.matrix_representation
         
         eigen_values, _ = np.linalg.eig(matrix_representation)
         
@@ -405,7 +414,9 @@ def create_from_matrix_representation(matrix):
                 for j in range(n_dimension):
                     choi_matrix[k * n_dimension + m, n * n_dimension +j] = matrix[k * n_dimension + n, m * n_dimension +j]
     
-    return create_from_choi_representation(choi_matrix)
+    res = create_from_choi_representation(choi_matrix)
+    res.matrix_representation = matrix
+    return res
 
 
 def pqmc_values(states, Q, pri):
@@ -432,15 +443,12 @@ def pqmc_values(states, Q, pri):
     print("epsilon_m:")
     print(epsilon_m.shape)
     epsilon_m_so = create_from_matrix_representation(epsilon_m)
-    print("epsilon_m_so done!")
-    # epsilon_m_infinity_so = epsilon_m_so.infinity()
     
     #compute P_even
     P_even = np.zeros([super_operator_demension * state_demension, super_operator_demension * state_demension], dtype=np.complex)
     bscc_min_pri_key = []
     bscc_min_pri_value = []
     B = epsilon_m_so.get_bscc(np.kron(I_c, I_H))
-    print("epsilon_m_so bscc done!")
     for b in B:
         C_b = []
         vecs = orth(b)
@@ -538,26 +546,29 @@ super_operator_demension: int
 if __name__ == '__main__':
     print("hello")
     '''
-    with open("key-distribution.txt") as f:
+    with open("args.ini") as f:
         lines = f.readlines()
-    states = np.array(literal_eval(lines[0].strip().split("->")[1].strip()))
-    Q = literal_eval(lines[1].strip().split("->")[1].strip())
-    classical_state = literal_eval(lines[2].strip().split("->")[1].strip())
-    pri = literal_eval(lines[3].strip().split("->")[1].strip())
+    states = np.array(literal_eval(lines[1].strip().split("=")[1].strip()))
+    Q = literal_eval(lines[2].strip().split("=")[1].strip())
+    # classical_state = literal_eval(lines[2].strip().split("->")[1].strip())
+    pri = literal_eval(lines[3].strip().split("=")[1].strip())
     print(pri)
-    print(classical_state)
-    
+    # print(classical_state)
+    '''
+
     # parse system arguments
     states = np.array(literal_eval(str(sys.argv[1])))
     Q = literal_eval(str(sys.argv[2]))
     pri = literal_eval(str(sys.argv[3]))
-    classical_state = literal_eval(str(sys.argv[4]))
     '''
+    classical_state = literal_eval(str(sys.argv[4]))
     
     states = np.array([0, 1, 2])
     Q = {(0, 0):[[0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,1.+0.j]], (0, 1):[[1.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j]], (1, 1):[[0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,1.+0.j]], (1, 2):[[1.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j]], (2, 2):[[0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,1.+0.j]], (2, 1):[[1.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j]]}
     pri = {0:0,1:0,2:1}
     classical_state = 2
+    '''
+    
     
     Q_prim = dict()
     for key, value in Q.items():
@@ -565,5 +576,4 @@ if __name__ == '__main__':
     Q = Q_prim
         
     print(pqmc_values(states, Q, pri))
-    
     
