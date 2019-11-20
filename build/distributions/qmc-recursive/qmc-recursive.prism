@@ -1,0 +1,22 @@
+qmc
+
+const matrix E0 = |0> <0|;
+const matrix E1 = |1> <1|;
+const vector(2) |p> = (|0> + |1>) / sqrt(2); 
+
+const vector(2) |q> = (|0> - |1>) / sqrt(2); 
+
+const superoperator(2) ampdamp0 = << E0 >>;
+const superoperator(2) ampdamp1 = << E1 >>;
+const superoperator(2) ampdamp2 = << |p> <p| >>;
+const superoperator(2) ampdamp3 = << |q> <q| >>;
+
+module loop
+  s : [0..3] init 0;
+  [] (s=0) -> ampdamp0: (s'=1);
+  [] (s=0) -> ampdamp1: (s'=2);
+  [] (s=1) -> (s'=1);
+  [] (s=2) -> ampdamp2: (s'=3);
+  [] (s=2) -> ampdamp3: (s'=0);
+  [] (s=3) -> (s'=3);
+endmodule
