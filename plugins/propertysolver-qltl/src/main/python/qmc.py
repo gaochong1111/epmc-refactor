@@ -121,45 +121,66 @@ class SuperOperator:
     super operator
     '''
     
-    def __init__(self, kraus=[]):
+    def __init__(self, kraus=[], matrix_representation=None):
         '''
         Constructor
-        kraus: np.matrix
+        kraus: list of np.matrix
+        matrix_representation: np.matrix
         '''
-        self._kraus = kraus
+        self._dimension = 0
+        if len(kraus) != 0 and matrix_representation is not None:
+            temp = np.matrix(np.zeros(shape=[self.dimension ** 2, self.dimension ** 2],dtype=np.complex))
+            for i in range(len(kraus)):
+                temp += np.kron(kraus[i], np.conjugate(kraus[i]))
+            if not array_equal(temp, matrix_representation):
+                print("kraus operators don't match matrix_representation!")
+                return
+        
         if len(kraus) != 0:
             self._dimension = kraus[0].shape[0]
             for m in kraus:
                 if len(m.shape) != 2 or m.shape[0] != self._dimension or m.shape[1] != self._dimension:
+                    print("Kraus operator's size is incorrect!")
                     return 
-        else:
-            self._dimension = 0
+        
+        if matrix_representation is not None:
+            if not is_square(matrix_representation):
+                print("Matrix is not a square!")
+                return
+            dimension = matrix_representation.shape[0]
+            sqrt = np.sqrt(dimension)
+    
+            if sqrt - np.floor(sqrt) > epsilon_0:
+                print("dimension is not a integer!")
+                return
+            self._dimension = int(np.floor(sqrt))
         self._kraus = kraus
-        self._matrix_representation = None
+        self._matrix_representation = matrix_representation
         
     @property
     def kraus(self):
+        if self._matrix_representation is not None and len(self._kraus) == 0:
+            choi_matrix = np.matrix(np.zeros([self._dimension ** 2, self._dimension ** 2], dtype=np.complex))
+            for k in range(self._dimension):
+                for n in range(self._dimension):
+                    for m in range(self._dimension):
+                        for j in range(self._dimension):
+                            choi_matrix[k * self._dimension + m, n * self._dimension +j] = \
+                            self._matrix_representation[k * self._dimension + n, m * self._dimension +j]
+        
+            eigen_values, eigen_vectors = np.linalg.eig(choi_matrix)    
+            for i in range(len(eigen_values)):
+                if eigen_values[i].real > epsilon_0:
+                    eigen_vector = eigen_vectors[:,i] * np.sqrt(eigen_values[i].real)
+                    if not is_zero_array(eigen_vector):
+                        self._kraus.append(eigen_vector.reshape([self._dimension, self._dimension]))
+              
         return self._kraus
-    
-    @kraus.setter
-    def kraus(self, value):
-        if len(value) != 0:
-            self._dimension = value[0].shape[0]
-            for m in value:
-                if len(m.shape) != 2 or m.shape[0] != self._dimension or m.shape[1] != self._dimension:
-                    return 
-        else:
-            self._dimension = 0
-        self._kraus = value
     
     @property
     def dimension(self):
         return self._dimension
     
-    @dimension.setter
-    def dimension(self, value):
-        self._dimension = value
-        
     @property
     def matrix_representation(self):
         if self._matrix_representation is None:
@@ -170,16 +191,12 @@ class SuperOperator:
         else:
             return self._matrix_representation
     
-    @matrix_representation.setter
-    def matrix_representation(self, value):
-        self._matrix_representation = value
-    
     def get_dual_super_operator(self):
         kraus = self.kraus
         dual_kraus = []
         for operator in kraus:
             dual_kraus.append(np.matrix(operator).H)
-        return SuperOperator(dual_kraus)
+        return SuperOperator(kraus=dual_kraus, matrix_representation=None)
     
     def get_positive_eigen_operators(self):
         '''
@@ -228,19 +245,19 @@ class SuperOperator:
     
     def product_super_operator(self, super_operator):
         new_matrix = self.matrix_representation * super_operator.matrix_representation
-        return create_from_matrix_representation(new_matrix)
+        return SuperOperator(kraus=[], matrix_representation=new_matrix)
     
     def product_operator(self, operator):
         kraus = []
         kraus.append(operator)
-        super_operator = SuperOperator(kraus)
+        super_operator = SuperOperator(kraus=kraus, matrix_representation=None)
         return super_operator.product_super_operator(self)
     
     def power(self, n):
         if n == 0:
             karus = []
             karus.append(np.eye(self.dimension, self.dimension, dtype=np.complex))
-            return SuperOperator(karus)
+            return SuperOperator(kraus=karus, matrix_representation=None)
         elif n > 0:
             return self.product_super_operator(self.power(n - 1))
         
@@ -276,7 +293,7 @@ class SuperOperator:
                 break
             previous_matrix = current_matrix
             ++n
-        return create_from_matrix_representation(current_matrix)
+        return SuperOperator(kraus=[], matrix_representation=current_matrix)
     
     def check_bscc(self, projector):
         support = get_support(self.apply_on_operator(projector))
@@ -285,7 +302,7 @@ class SuperOperator:
         
         matrix_representation = np.kron(projector, np.conjugate(projector)) * self.matrix_representation
         
-        pro_so = create_from_matrix_representation(matrix_representation)
+        pro_so = SuperOperator(kraus=[], matrix_representation=matrix_representation)
         fix_points = pro_so.get_positive_eigen_operators()
         
         if len(fix_points) != 1:
@@ -295,7 +312,7 @@ class SuperOperator:
 
     def get_bscc(self, projector):
         matrix_representation = np.kron(projector, np.conjugate(projector)) * self.matrix_representation
-        pro_so = create_from_matrix_representation(matrix_representation)
+        pro_so = SuperOperator(kraus=[], matrix_representation=matrix_representation)
         
         fix_points = pro_so.get_positive_eigen_operators()
         
@@ -392,32 +409,7 @@ def create_from_choi_representation(matrix):
             if not is_zero_array(eigen_vector):
                 kraus.append(eigen_vector.reshape([n_dimension, n_dimension]))
     
-    return SuperOperator(kraus)
-
-def create_from_matrix_representation(matrix):
-    if not is_square(matrix):
-        print("Matrix is not a square!")
-        return
-    dimension = matrix.shape[0]
-    sqrt = np.sqrt(dimension)
-    
-    if sqrt - np.floor(sqrt) > epsilon_0:
-        print("Sqrt is not a integer!")
-        return
-    
-    n_dimension = int(sqrt)
-    choi_matrix = np.matrix(np.zeros([dimension, dimension], dtype=np.complex))
-    
-    for k in range(n_dimension):
-        for n in range(n_dimension):
-            for m in range(n_dimension):
-                for j in range(n_dimension):
-                    choi_matrix[k * n_dimension + m, n * n_dimension +j] = matrix[k * n_dimension + n, m * n_dimension +j]
-    
-    res = create_from_choi_representation(choi_matrix)
-    res.matrix_representation = matrix
-    return res
-
+    return SuperOperator(kraus=kraus, matrix_representation=None)
 
 def pqmc_values(states, Q, pri):
     if len(Q) == 0:
@@ -442,7 +434,7 @@ def pqmc_values(states, Q, pri):
     # compute epsilon_m_infinity
     print("epsilon_m:")
     print(epsilon_m.shape)
-    epsilon_m_so = create_from_matrix_representation(epsilon_m)
+    epsilon_m_so = SuperOperator(kraus=[], matrix_representation=epsilon_m)
     
     #compute P_even
     P_even = np.zeros([super_operator_demension * state_demension, super_operator_demension * state_demension], dtype=np.complex)
@@ -555,6 +547,7 @@ if __name__ == '__main__':
     print(pri)
     # print(classical_state)
     '''
+    
 
     # parse system arguments
     states = np.array(literal_eval(str(sys.argv[1])))
@@ -567,12 +560,11 @@ if __name__ == '__main__':
     Q = {(0, 0):[[0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,1.+0.j]], (0, 1):[[1.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j]], (1, 1):[[0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,1.+0.j]], (1, 2):[[1.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j]], (2, 2):[[0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,1.+0.j]], (2, 1):[[1.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j]]}
     pri = {0:0,1:0,2:1}
     classical_state = 2
-    '''
-    
+    '''  
     
     Q_prim = dict()
     for key, value in Q.items():
-        Q_prim[key] = create_from_matrix_representation(np.array(value))
+        Q_prim[key] = SuperOperator(kraus=[], matrix_representation=np.array(value))
     Q = Q_prim
         
     print(pqmc_values(states, Q, pri))
