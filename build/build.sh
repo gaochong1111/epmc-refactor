@@ -17,6 +17,9 @@ prepare_plugin automata
 prepare_plugin automaton-determinisation 
 prepare_plugin prism-format
 prepare_plugin qmc
+prepare_plugin graphsolver-iterative
 prepare_plugin propertysolver-propositional
+prepare_plugin propertysolver-operator
+prepare_plugin propertysolver-pctl
 prepare_plugin propertysolver-qltl
 assemble_end qmc
