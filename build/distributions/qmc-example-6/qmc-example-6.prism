@@ -1,0 +1,14 @@
+qmc // model type
+
+const matrix(2,2) E0 = |0> <0|;
+const matrix E1 = |1> <1|;
+const superoperator(2) ampdamp0 = << E0 >>;
+const superoperator(2) ampdamp1 = << E1 >>;
+
+module loop
+  s : [0..1] init 0;
+  [] (s=0) -> ampdamp0: (s'=0);
+  [] (s=0) -> ampdamp1: (s'=1);
+  [] (s=1) -> ampdamp0: (s'=1);
+  [] (s=1) -> ampdamp1: (s'=1);
+endmodule
