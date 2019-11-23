@@ -10,8 +10,11 @@ from scipy.linalg.decomp_svd import orth
 from scipy.constants.constants import epsilon_0
 from scipy.linalg import null_space
 from ast import literal_eval
+from configparser import ConfigParser
 
 np.set_printoptions(suppress=True)
+
+verbose = False 
 
 '''
 COMMON
@@ -440,8 +443,9 @@ def pqmc_values(states, Q, pri):
             epsilon_m += np.kron(E, np.conjugate(E))
     
     # compute epsilon_m_infinity
-    print("epsilon_m:")
-    print(epsilon_m.shape)
+    if verbose:
+        print("epsilon_m:")
+        print(epsilon_m.shape)
     epsilon_m_so = create_from_matrix_representation(epsilon_m)
     
     #compute P_even
@@ -478,8 +482,9 @@ def pqmc_values(states, Q, pri):
             if bscc_min_pri_value[i] == k:
                 P_k += bscc_min_pri_key[i]
         P_even += P_k
-    print("P_even:")
-    print(P_even)
+    if verbose:
+        print("P_even:")
+        print(P_even)
     
     P_vec = np.zeros([(super_operator_demension ** 2) * (state_demension ** 2), 1], dtype=np.complex)
     
@@ -489,8 +494,9 @@ def pqmc_values(states, Q, pri):
             s_ket = I_c[j].reshape([state_demension, 1])
             P_vec += np.kron(np.kron(s_ket, i_ket), np.kron(s_ket, i_ket))
     P_vec = np.dot(np.kron(np.kron(P_even, I_c), I_H), P_vec)
-    print("P_vec:")
-    print(P_vec)
+    if verbose:
+        print("P_vec:")
+        print(P_vec)
     
     eigen_values, eigen_vectors = np.linalg.eig(np.matrix(epsilon_m))
     Y = list()
@@ -498,8 +504,9 @@ def pqmc_values(states, Q, pri):
     for i in range(len(eigen_values)):
         if complex_equal(eigen_values[i], 1.0 + 0.j):
             Y.append(np.array(eigen_vectors[:, i]).reshape([-1, ]))
-    print("Y")
-    print(Y)
+    if verbose:
+        print("Y")
+        print(Y)
     
     v_ket = np.zeros([(super_operator_demension ** 2) * (state_demension ** 2), 1], dtype=np.complex)
     for i in range(len(Y)):
@@ -513,8 +520,9 @@ def pqmc_values(states, Q, pri):
         x_prim_ket = np.array(null_space(np.array(coefficient))[:, 0]).reshape([-1, ])
         x_ket = x_prim_ket / np.inner(Y[i], x_prim_ket)
         v_ket += (np.inner(Y[i], P_vec.reshape([-1, ])) * x_ket).reshape([-1, 1])
-    print("v_ket:")
-    print(v_ket)
+    if verbose:
+        print("v_ket:")
+        print(v_ket)
         
     M = np.zeros([super_operator_demension * state_demension, super_operator_demension * state_demension], dtype=np.complex)
     for i in range(super_operator_demension):
@@ -535,7 +543,19 @@ def pqmc_values(states, Q, pri):
     return res
     
 
-        
+def get_matrix_str(m):
+    strs = []
+    ma = np.asarray(m)
+    row, col = ma.shape
+    lines = []
+    for ri in range(0, row):
+        cs = []
+        for ci in range(0, col):
+            element = ma[ri][ci]
+            cs.append("{}+{}j".format(element.real, element.imag))
+        lines.append(",".join(cs))
+    return "$".join(lines)
+     
 '''
 states: int set
 Q: qmc (int, int): superoperator
@@ -544,36 +564,18 @@ classical_state: int
 super_operator_demension: int
 '''
 if __name__ == '__main__':
-    print("hello")
-    '''
-    with open("args.ini") as f:
-        lines = f.readlines()
-    states = np.array(literal_eval(lines[1].strip().split("=")[1].strip()))
-    Q = literal_eval(lines[2].strip().split("=")[1].strip())
-    # classical_state = literal_eval(lines[2].strip().split("->")[1].strip())
-    pri = literal_eval(lines[3].strip().split("=")[1].strip())
-    print(pri)
-    # print(classical_state)
-    '''
-
-    # parse system arguments
-    states = np.array(literal_eval(str(sys.argv[1])))
-    Q = literal_eval(str(sys.argv[2]))
-    pri = literal_eval(str(sys.argv[3]))
-    '''
-    classical_state = literal_eval(str(sys.argv[4]))
-    
-    states = np.array([0, 1, 2])
-    Q = {(0, 0):[[0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,1.+0.j]], (0, 1):[[1.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j]], (1, 1):[[0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,1.+0.j]], (1, 2):[[1.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j]], (2, 2):[[0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,1.+0.j]], (2, 1):[[1.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j], [0.+0.j,0.+0.j,0.+0.j,0.+0.j]]}
-    pri = {0:0,1:0,2:1}
-    classical_state = 2
-    '''
-    
+    cfg = ConfigParser()
+    cfg.read(sys.argv[1], "utf8")
+    args = cfg["args"]
+    states = np.array(literal_eval(str(args["stateStr"])))
+    Q = literal_eval(str(args["qStr"]))
+    pri = literal_eval(str(args["priStr"]))
     
     Q_prim = dict()
     for key, value in Q.items():
         Q_prim[key] = create_from_matrix_representation(np.array(value))
     Q = Q_prim
-        
-    print(pqmc_values(states, Q, pri))
-    
+    Q_res = pqmc_values(states, Q, pri)
+    for state in Q_res:
+        print("{} : {}".format(state, get_matrix_str(Q_res[state])))
+
