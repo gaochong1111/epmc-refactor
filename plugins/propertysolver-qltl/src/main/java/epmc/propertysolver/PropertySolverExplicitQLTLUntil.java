@@ -71,7 +71,6 @@ import epmc.qmc.value.TypeComplex;
 import epmc.qmc.value.TypeMatrix;
 import epmc.qmc.value.ValueComplex;
 import epmc.qmc.value.ValueMatrix;
-import epmc.util.BitSet;
 import epmc.value.TypeArray;
 import epmc.value.TypeWeight;
 import epmc.value.UtilValue;

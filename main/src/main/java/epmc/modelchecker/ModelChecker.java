@@ -198,7 +198,7 @@ public final class ModelChecker implements Closeable {
         }
         time = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - time);
         if(! hasProperties) {
-        	System.out.println("No property has been specified");
+        	System.out.println("[Warning] No property has been specified");
         }
         getLog().send(MessagesModelChecker.MODEL_CHECKING_DONE, time);
     }
@@ -275,7 +275,7 @@ public final class ModelChecker implements Closeable {
             solver.setProperty(property);
             solver.setForStates(states);
             if (solver.canHandle()) {
-            	System.out.println("CHECK -> SELECT SOLVER: " + solver.getClass());
+            	// System.out.println("CHECK -> SELECT SOLVER: " + solver.getClass());
                 return solver.solve();
             }
         }
@@ -324,7 +324,7 @@ public final class ModelChecker implements Closeable {
             solver.setProperty(property);
             solver.setForStates(states);
             if (solver.canHandle()) {
-            	System.out.println("REQUIRED NODE PROPERTIES -> SELECT SOLVER: " + solver.getClass());
+            	// System.out.println("REQUIRED NODE PROPERTIES -> SELECT SOLVER: " + solver.getClass());
                 return solver.getRequiredNodeProperties();
             }
         }

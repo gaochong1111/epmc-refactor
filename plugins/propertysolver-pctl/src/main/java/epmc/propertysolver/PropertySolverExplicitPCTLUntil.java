@@ -321,7 +321,7 @@ public final class PropertySolverExplicitPCTLUntil implements PropertySolver {
         }
         Value val = typeWeight.newValue();
         for (int i = 0; i < computeForStates.size(); i++) {
-            int state = computeForStates.getExplicitIthState(i);
+            // int state = computeForStates.getExplicitIthState(i);
             values.get(val, i);
             resultValues.set(val, i);
         }
